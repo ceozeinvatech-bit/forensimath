@@ -1,0 +1,123 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-forensic-bg: #060b14;
+  --color-forensic-panel: #0f1728;
+  --color-forensic-surface: #141d31;
+  --color-forensic-border: #23324a;
+  --color-forensic-muted: #7b8aa4;
+  --color-forensic-text: #f3f6fb;
+  --color-forensic-amber: #f7b84a;
+  --color-forensic-amber-dim: #cf7f0d;
+  --color-forensic-amber-glow: rgba(247, 184, 74, 0.14);
+  --color-forensic-accent: #4fd1ff;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', Consolas, monospace;
+}
+
+:root[data-theme='light'] {
+  --color-forensic-bg: #f4f7fc;
+  --color-forensic-panel: #ffffff;
+  --color-forensic-surface: #eef3f8;
+  --color-forensic-border: #d8e1ee;
+  --color-forensic-muted: #607086;
+  --color-forensic-text: #0f172a;
+  --color-forensic-amber: #b56816;
+  --color-forensic-amber-dim: #93550d;
+  --color-forensic-amber-glow: rgba(181, 104, 22, 0.14);
+  --color-forensic-accent: #0f7aa2;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100svh;
+  width: 100%;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', 'Roboto', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+  background-color: var(--color-forensic-bg);
+  background-image:
+    radial-gradient(circle at top left, rgba(247, 184, 74, 0.12), transparent 24%),
+    linear-gradient(135deg, var(--color-forensic-bg) 0%, color-mix(in srgb, var(--color-forensic-bg) 88%, var(--color-forensic-surface) 12%) 100%);
+  color: var(--color-forensic-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+body, button, input, textarea, select {
+  font-family: inherit;
+}
+
+button,
+[role='button'] {
+  color: var(--color-forensic-text) !important;
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+
+button:hover,
+[role='button']:hover {
+  color: var(--color-forensic-text) !important;
+}
+
+button:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--color-forensic-amber);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background-color: var(--color-forensic-amber-glow);
+  color: var(--color-forensic-text);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-forensic-amber) transparent;
+}
+
+.forensic-grid-bg {
+  background-color: var(--color-forensic-bg);
+  background-image:
+    linear-gradient(rgba(247, 184, 74, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(247, 184, 74, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.forensic-grid-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(79, 209, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 209, 255, 0.08) 1px, transparent 1px);
+  background-size: 240px 240px;
+  pointer-events: none;
+}
