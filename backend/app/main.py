@@ -12,7 +12,7 @@ if FRONTEND_ORIGINS:
     origins = [o.strip() for o in FRONTEND_ORIGINS.split(',') if o.strip()]
 else:
     # during development allow common local origins
-    origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
+    origins = ['https://forensicmaths.onrender.com', 'http://127.0.0.1:5173']
 
 app.add_middleware(
     CORSMiddleware,
