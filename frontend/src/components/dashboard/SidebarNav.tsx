@@ -2,7 +2,6 @@ const NAV_ITEMS = [
   { label: 'Case Info', icon: '01' },
   { label: 'Evidence', icon: '02' },
   { label: 'Math Engine', icon: '03' },
-  { label: 'OpenCV', icon: '04' },
   { label: 'Scenarios', icon: '05' },
   { label: '2D Scene', icon: '06' },
   { label: 'Timeline', icon: '07' },
