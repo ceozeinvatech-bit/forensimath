@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { label: 'Scenarios', icon: '04' },
   { label: '2D Scene', icon: '05' },
   { label: 'Timeline', icon: '06' },
+  
   { label: 'Summary', icon: '07' },
 ] as const
 
