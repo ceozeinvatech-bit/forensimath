@@ -149,6 +149,9 @@ const createEmptyCaseState = () => ({
   },
 })
 
+// track autogen requests per-case in this session to avoid duplicate triggers
+const autogenTriggered = new Set<string>()
+
 export const useInvestigationStore = create<InvestigationState>()(
   persist(
     (set, get) => ({
@@ -216,6 +219,13 @@ export const useInvestigationStore = create<InvestigationState>()(
           const created = await api.createCase(body)
           const nextCases = [...get().cases, created]
           set({ cases: nextCases, selectedCaseId: created.id, activeCase: created.title, evidence: created.evidence ?? [], scenarios: created.scenarios ?? [], calculations: created.calculations ?? [] })
+          // ensure UI selects the newly created case so downstream logic (like autogen) can run
+          try {
+            await get().selectCase(created.id)
+          } catch (err) {
+            // selection failure should not block case creation
+            console.error('Auto-select after create failed', err)
+          }
         } catch (err) {
           console.error('Create case failed', err)
           throw err
@@ -249,6 +259,30 @@ export const useInvestigationStore = create<InvestigationState>()(
             summaryGenerated: data.summaryGenerated ?? false,
             analysisResults: (data.calculations || []).map((c: any) => ({ id: c.id, name: c.title, result: c.result })),
           })
+          // If the case currently has no scenarios but does have evidence, trigger the autogen endpoint once
+          try {
+            const hasScenarios = uniqueScenarios.length > 0
+            const evidenceCount = (data.evidence || []).length
+            if (!hasScenarios && evidenceCount > 0 && !autogenTriggered.has(data.id)) {
+              autogenTriggered.add(data.id)
+              try {
+                await api.autoGenerateScenarios(data.id)
+                // refresh case to pick up generated scenarios
+                const refreshedAfterGen = await api.getCase(caseId)
+                const rawScenarios2 = refreshedAfterGen.scenarios || []
+                const map2 = new Map<string, any>()
+                rawScenarios2.forEach((ss: any) => { if (ss && ss.id) map2.set(ss.id, ss) })
+                const uniqueScenarios2 = Array.from(map2.values())
+                set({ scenarios: uniqueScenarios2, activeScenarioId: uniqueScenarios2?.[0]?.id ?? '' })
+              } catch (err) {
+                // autogen failed — log and allow user to retry manually
+                console.error('Auto-generate scenarios failed', err)
+                autogenTriggered.delete(data.id)
+              }
+            }
+          } catch (err) {
+            console.error('Autogen trigger check failed', err)
+          }
           // if any scenarios are not yet evaluated, run evaluateAll to produce deterministic statuses
           const hasNotAnalyzed = uniqueScenarios.some((s: any) => !s.analysisStatus || (typeof s.analysisStatus === 'string' && s.analysisStatus.toLowerCase().includes('not analyzed')))
           if (hasNotAnalyzed) {
