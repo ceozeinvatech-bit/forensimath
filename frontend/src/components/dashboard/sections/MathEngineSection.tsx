@@ -21,10 +21,16 @@ export default function MathEngineSection() {
   const [searchTerm, setSearchTerm] = useState('')
   const [showMeasurementCharts, setShowMeasurementCharts] = useState(true)
 
+  // use selected case dimensions if available so plots scale to case units
+  const selectedCase = useInvestigationStore((state) => state.cases.find((c) => c.id === state.selectedCaseId))
+  const plotBounds = { width: selectedCase?.dimensions?.width ?? 12, depth: selectedCase?.dimensions?.depth ?? 8 }
   const validCoordinates = evidence.filter((item) => Number.isFinite(item.position.x) && Number.isFinite(item.position.z))
   const evidenceWithMeasurements = evidence.filter((item) => Object.values(item.measurements).some((value) => Boolean(value)))
   const evidenceWithOrientation = evidence.filter((item) => Boolean(item.measurements.orientation) || Boolean(item.measurements.direction))
-  const footprintEvidence = evidence.filter((item) => item.type === 'Footprint')
+  const footprintEvidence = evidence.filter((item) => {
+    const t = (item.type || '').toString().toLowerCase()
+    return t === 'footprint' || t === 'footwear impression' || t.includes('foot')
+  })
 
   const numericMeasurements = useMemo(() => {
     const values = evidence
@@ -257,9 +263,9 @@ export default function MathEngineSection() {
               ))}
               <text x="20" y="24" fill="#f8fafc" fontSize="11">Z</text>
               <text x="525" y="292" fill="#f8fafc" fontSize="11">X</text>
-              {evidence.map((item) => {
-                const x = 40 + ((item.position.x / 12) * 480)
-                const z = 280 - ((item.position.z / 8) * 240)
+                {evidence.map((item) => {
+                const x = 40 + ((item.position.x / plotBounds.width) * 480)
+                const z = 280 - ((item.position.z / plotBounds.depth) * 240)
                 const isSelected = item.id === selectedEvidenceId
                 return (
                   <g key={item.id} onClick={() => setSceneState({ selectedEvidenceId: item.id })}>

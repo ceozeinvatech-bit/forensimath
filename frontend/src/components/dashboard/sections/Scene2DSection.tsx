@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import { Sparkles } from 'lucide-react'
 import { useInvestigationStore } from '../../../store/investigationStore'
 import EvidenceInspector from './EvidenceInspector'
 import SectionShell from './SectionShell'
 
-const sceneBounds = { width: 12, depth: 8 }
+// default scene bounds (meters) — overridden by selected case dimensions when available
+const defaultSceneBounds = { width: 12, depth: 8 }
 
 export default function Scene2DSection() {
   const evidence = useInvestigationStore((state) => state.evidence)
@@ -18,6 +19,16 @@ export default function Scene2DSection() {
   const [showMeasurements, setShowMeasurements] = useState(true)
   const [connectFrom, setConnectFrom] = useState<string | null>(null)
   const [connectTo, setConnectTo] = useState<string | null>(null)
+  // zoom / pan state
+  const [scale, setScale] = useState<number>(1)
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  const isPanning = useRef(false)
+  const lastMouse = useRef<{ x: number; y: number } | null>(null)
+  const [hoverInfo, setHoverInfo] = useState<{ x: number; y: number; item: any } | null>(null)
+
+  const selectedCase = useInvestigationStore((state) => state.cases.find((c) => c.id === state.selectedCaseId))
+  const sceneBounds = { width: selectedCase?.dimensions?.width ?? defaultSceneBounds.width, depth: selectedCase?.dimensions?.depth ?? defaultSceneBounds.depth }
 
   const scenePoints = useMemo(() => {
     return evidence.map((item) => {
@@ -25,7 +36,32 @@ export default function Scene2DSection() {
       const z = 240 - ((item.position.z / sceneBounds.depth) * 180)
       return { ...item, x, z }
     })
-  }, [evidence])
+  }, [evidence, sceneBounds.width, sceneBounds.depth])
+
+  const toScreen = (x: number, y: number) => ({ x: pan.x + x * scale, y: pan.y + y * scale })
+  const zoomBy = (factor: number) => setScale((s) => Math.min(6, Math.max(0.25, +(s * factor).toFixed(3))))
+  const resetView = () => { setScale(1); setPan({ x: 0, y: 0 }); }
+
+  const onBackgroundMouseDown = (e: React.MouseEvent) => {
+    // start panning only when background clicked
+    if ((e.target as Element).id !== 'scene-background') return
+    isPanning.current = true
+    lastMouse.current = { x: e.clientX, y: e.clientY }
+  }
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!isPanning.current || !lastMouse.current) return
+    const dx = e.clientX - lastMouse.current.x
+    const dy = e.clientY - lastMouse.current.y
+    lastMouse.current = { x: e.clientX, y: e.clientY }
+    setPan((p) => ({ x: p.x + dx, y: p.y + dy }))
+  }
+  const onMouseUp = () => { isPanning.current = false; lastMouse.current = null }
+
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    const delta = e.deltaY < 0 ? 1.12 : 0.9
+    zoomBy(delta)
+  }
 
   // Build pairwise distance lines from calculations so only real relationships are drawn
   const calculationLines = useMemo(() => {
@@ -54,6 +90,7 @@ export default function Scene2DSection() {
 
     switch (item.type) {
       case 'Footprint':
+      case 'Footwear Impression':
         return (
           <g key={item.id}>
             <ellipse cx={baseX} cy={baseY} rx="20" ry="12" fill="rgba(245,158,11,0.18)" stroke="#f59e0b" strokeWidth={isSelected ? 3 : 1.5} transform={`rotate(-24 ${baseX} ${baseY})`} />
@@ -122,20 +159,22 @@ export default function Scene2DSection() {
     >
       <div className="grid gap-4 xl:grid-cols-[1.4fr_0.7fr]">
         <div className="rounded border border-forensic-border bg-forensic-panel/70 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.25em] text-forensic-amber uppercase">Simulated Scene — Top-down View</p>
               <p className="mt-1 text-sm text-slate-400">Coordinate unit: metres • Scene bounds: {sceneBounds.width}m × {sceneBounds.depth}m</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-forensic-text backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:border-forensic-accent/60 hover:bg-forensic-surface/80">Zoom In</button>
-              <button type="button" className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-forensic-text backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:border-forensic-accent/60 hover:bg-forensic-surface/80">Reset View</button>
+              <button type="button" onClick={() => zoomBy(1.2)} className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-forensic-text backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:border-forensic-accent/60 hover:bg-forensic-surface/80">+</button>
+              <button type="button" onClick={() => zoomBy(0.83)} className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-forensic-text backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:border-forensic-accent/60 hover:bg-forensic-surface/80">−</button>
+              <button type="button" onClick={() => resetView()} className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-forensic-text backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:border-forensic-accent/60 hover:bg-forensic-surface/80">⟳</button>
             </div>
           </div>
 
           <div className="rounded border border-forensic-border bg-forensic-surface/40 p-3">
-            <svg viewBox="0 0 560 320" className="h-[340px] w-full">
-              <rect x="0" y="0" width="560" height="320" fill="#0f172a" rx="12" />
+            <div style={{ position: 'relative' }}>
+            <svg ref={svgRef} onWheel={onWheel} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onMouseDown={onBackgroundMouseDown} viewBox="0 0 560 320" className="h-[340px] w-full">
+              <rect id="scene-background" x="0" y="0" width="560" height="320" fill="#0f172a" rx="12" />
               {showGrid && (
                 <g stroke="rgba(148,163,184,0.16)" strokeWidth="1">
                   {Array.from({ length: 13 }).map((_, index) => (
@@ -147,59 +186,96 @@ export default function Scene2DSection() {
                 </g>
               )}
 
-              {activeScenario?.pathPoints && activeScenario.pathPoints.length > 0 && (
-                <polyline
-                  fill="none"
-                  stroke="#38bdf8"
-                  strokeWidth="3"
-                  points={activeScenario.pathPoints.map((point) => `${80 + (point.x / sceneBounds.width) * 420},${240 - (point.z / sceneBounds.depth) * 180}`).join(' ')}
-                />
-              )}
+              <g transform={`translate(${pan.x},${pan.y}) scale(${scale})`}>
+                {activeScenario?.pathPoints && activeScenario.pathPoints.length > 0 && (
+                  <polyline
+                    fill="none"
+                    stroke="#38bdf8"
+                    strokeWidth="3"
+                    points={activeScenario.pathPoints.map((point) => `${80 + (point.x / sceneBounds.width) * 420},${240 - (point.z / sceneBounds.depth) * 180}`).join(' ')}
+                  />
+                )}
 
               {showMeasurements && (
                 <line x1="80" y1="240" x2="500" y2="60" stroke="rgba(245,158,11,0.24)" strokeWidth="1.2" strokeDasharray="4 4" />
               )}
 
-              {scenePoints.map((point) => (
-                <g key={point.id} onClick={() => setSceneState({ selectedEvidenceId: point.id })}>
-                  {drawMarker(point)}
-                  {showLabels && (
-                    <text x={point.x + 12} y={point.z - 10} fill="#f8fafc" fontSize="11">
-                      {point.label}
-                    </text>
-                  )}
-                </g>
-              ))}
-
-              {/* draw distance lines */}
-              {calculationLines.map((line, idx) => {
-                const from = scenePoints.find((p) => p.label === line.fromLabel)
-                const to = scenePoints.find((p) => p.label === line.toLabel)
-                if (!from || !to) return null
-                return (
-                  <g key={`line-${idx}`}> 
-                    <line x1={from.x} y1={from.z} x2={to.x} y2={to.z} stroke="#f59e0b" strokeWidth={1.8} />
-                    {showMeasurements && (
-                      <text x={(from.x + to.x) / 2 + 6} y={(from.z + to.z) / 2 - 6} fill="#f8fafc" fontSize="11">{line.distance}</text>
+                {scenePoints.map((point) => (
+                  <g key={point.id} onClick={() => setSceneState({ selectedEvidenceId: point.id })} onMouseEnter={(ev) => { const s = toScreen(point.x, point.z); setHoverInfo({ x: s.x, y: s.y, item: point }) }} onMouseLeave={() => setHoverInfo(null)}>
+                    {drawMarker(point)}
+                    {showLabels && (
+                      <text x={point.x + 12} y={point.z - 14} fill="#f8fafc" fontSize="11" style={{ pointerEvents: 'none' }}>
+                        {point.label}
+                      </text>
                     )}
                   </g>
-                )
-              })}
+                ))}
+
+              {/* draw distance lines */}
+                {calculationLines.map((line, idx) => {
+                  const from = scenePoints.find((p) => p.label === line.fromLabel)
+                  const to = scenePoints.find((p) => p.label === line.toLabel)
+                  if (!from || !to) return null
+                  // compute midpoint and perpendicular offset for label
+                  const midX = (from.x + to.x) / 2
+                  const midY = (from.z + to.z) / 2
+                  const dx = to.x - from.x
+                  const dy = to.z - from.z
+                  const dist = Math.hypot(dx * (sceneBounds.width / sceneBounds.width), dy * (sceneBounds.depth / sceneBounds.depth))
+                  const labelOffset = 12
+                  const len = Math.hypot(dx, dy) || 1
+                  const ux = -dy / len
+                  const uy = dx / len
+                  const lx = midX + ux * labelOffset
+                  const ly = midY + uy * labelOffset
+                  const distanceValue = Math.hypot((to.position.x - from.position.x), (to.position.z - from.position.z))
+                  return (
+                    <g key={`line-${idx}`}> 
+                      <line x1={from.x} y1={from.z} x2={to.x} y2={to.z} stroke="#f59e0b" strokeWidth={1.8} />
+                      {showMeasurements && (
+                        <g>
+                          <text x={lx} y={ly} fill="#f8fafc" fontSize="11" style={{ pointerEvents: 'none' }}>{`${Math.round(distanceValue)} units`}</text>
+                        </g>
+                      )}
+                    </g>
+                  )
+                })}
               {/* draw explicit user-selected connection */}
-              {connectFrom && connectTo && (
-                (() => {
+                {connectFrom && connectTo && (() => {
                   const from = scenePoints.find((p) => p.label === connectFrom)
                   const to = scenePoints.find((p) => p.label === connectTo)
                   if (!from || !to) return null
+                  const midX = (from.x + to.x) / 2
+                  const midY = (from.z + to.z) / 2
+                  const dx = to.x - from.x
+                  const dy = to.z - from.z
+                  const len = Math.hypot(dx, dy) || 1
+                  const ux = -dy / len
+                  const uy = dx / len
+                  const lx = midX + ux * 12
+                  const ly = midY + uy * 12
+                  const distanceValue = Math.hypot((to.position.x - from.position.x), (to.position.z - from.position.z))
                   return (
                     <g key={`user-line-${connectFrom}-${connectTo}`}>
                       <line x1={from.x} y1={from.z} x2={to.x} y2={to.z} stroke="#ef4444" strokeWidth={2.4} strokeDasharray="6 4" />
-                      <text x={(from.x + to.x) / 2 + 6} y={(from.z + to.z) / 2 - 6} fill="#ffdddd" fontSize="11">{`${connectFrom} → ${connectTo}`}</text>
+                      <text x={lx} y={ly} fill="#ffdddd" fontSize="11">{`${Math.round(distanceValue)} units`}</text>
                     </g>
                   )
-                })()
-              )}
+                })()}
+              </g>
             </svg>
+            {hoverInfo && (
+              <div style={{ position: 'absolute', left: hoverInfo.x + 12, top: hoverInfo.y - 48, background: 'rgba(2,6,23,0.9)', color: '#f8fafc', padding: '8px', borderRadius: 8, fontSize: 12, pointerEvents: 'none' }}>
+                <div style={{ fontWeight: 700 }}>{hoverInfo.item.label}</div>
+                <div style={{ fontSize: 12, opacity: 0.9 }}>{hoverInfo.item.type}</div>
+                <div style={{ fontSize: 11, opacity: 0.8 }}>X: {hoverInfo.item.position.x.toFixed(1)}</div>
+                <div style={{ fontSize: 11, opacity: 0.8 }}>Z: {hoverInfo.item.position.z.toFixed(1)}</div>
+                {hoverInfo.item.measurements?.length && <div style={{ fontSize: 11, opacity: 0.8 }}>Length: {hoverInfo.item.measurements.length}</div>}
+                {hoverInfo.item.measurements?.width && <div style={{ fontSize: 11, opacity: 0.8 }}>Width: {hoverInfo.item.measurements.width}</div>}
+                {hoverInfo.item.measurements?.direction && <div style={{ fontSize: 11, opacity: 0.8 }}>Direction: {hoverInfo.item.measurements.direction}</div>}
+              </div>
+            )}
+            </div>
           </div>
         </div>
 
