@@ -125,35 +125,67 @@ def get_scenario(case_id: str, scenario_id: str):
 @router.patch('/cases/{case_id}/scenarios/{scenario_id}', tags=['scenarios'])
 def update_scenario(case_id: str, scenario_id: str, payload: dict):
     db = get_db()
-    result = db.scenarios.update_one({'_id': ObjectId(scenario_id), 'caseId': case_id}, {'$set': payload})
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail='Scenario not found')
-    doc = db.scenarios.find_one({'_id': ObjectId(scenario_id)})
-    return serialize_scenario(doc)
+    analysis_result = analyze_scenario(scenario, evidence)
 
+    # Build deterministic, human-friendly explanation
+    status = analysis_result.get('analysisStatus', 'Analysis pending')
+    counts = analysis_result.get('analysisCounts', {})
+    conflicts = analysis_result.get('analysisConflicts', [])
+    gaps = analysis_result.get('analysisGaps', [])
+    recommendations = analysis_result.get('analysisRecommendations', [])
 
-@router.delete('/cases/{case_id}/scenarios/{scenario_id}', tags=['scenarios'])
-def delete_scenario(case_id: str, scenario_id: str):
-    db = get_db()
-    result = db.scenarios.delete_one({'_id': ObjectId(scenario_id), 'caseId': case_id})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail='Scenario not found')
-    return {'deleted': True}
+    parts = []
+    parts.append(f"Scenario: {scenario.get('name')} — {scenario.get('description', '')}")
+    parts.append(f"Status: {status}.")
+    parts.append(f"Evidence checked: {counts.get('supporting', 0) + counts.get('conflicting', 0) + counts.get('unresolved', 0)} items.")
+    parts.append(f"Supports this scenario: {counts.get('supporting', 0)} items. Conflicts: {counts.get('conflicting', 0)} items. Cannot evaluate: {counts.get('unresolved', 0)} items.")
 
+    if counts.get('supporting', 0) > 0:
+        parts.append('What agrees: Some evidence measurements (position, distance, or direction) are geometrically compatible with the proposed path.')
+    else:
+        parts.append('What agrees: None of the available evidence directly supports the path based on the current measurements.')
 
-@router.post('/cases/{case_id}/scenarios/{scenario_id}/evaluate', tags=['scenarios'])
-def evaluate_scenario(case_id: str, scenario_id: str):
-    db = get_db()
-    scenario = db.scenarios.find_one({'_id': ObjectId(scenario_id), 'caseId': case_id})
-    if not scenario:
-        raise HTTPException(status_code=404, detail='Scenario not found')
+    if conflicts:
+        first = conflicts[0]
+        eid = first.get('evidenceId')
+        parts.append(f"What conflicts: {first.get('type')} detected for evidence {eid} ({first.get('difference')}).")
+    else:
+        parts.append('What conflicts: No direct conflicts were detected from the available measurements.')
 
-    # load case and evidence for context
-    case_doc = db.cases.find_one({'_id': ObjectId(case_id)})
-    if case_doc:
-        case_doc['id'] = str(case_doc['_id'])
-        case_doc.pop('_id', None)
+    if gaps:
+        parts.append('What is missing: ' + ' '.join(gaps))
+    else:
+        parts.append('What is missing: No missing fields were detected for evaluated evidence.')
 
+    # Meaning and next steps
+    if status == 'Supported':
+        parts.append('Meaning: The available evidence is consistent with this proposed movement path. This is not proof; it only indicates geometric agreement with entered measurements.')
+    elif status == 'Conflicting':
+        parts.append('Meaning: One or more measurements disagree with this path; review the conflicting evidence and measurement sources.')
+    elif status == 'Cannot determine yet':
+        parts.append('Meaning: There is not enough information to confirm or reject the proposed movement path.')
+    else:
+        parts.append('Meaning: The analysis produced a mixed result; inspect the detailed evidence analysis for specifics.')
+
+    if recommendations:
+        parts.append('Recommended next steps: ' + ' '.join(recommendations))
+
+    explanation = '\n'.join(parts)
+
+    db.scenarios.update_one(
+        {'_id': ObjectId(scenario_id)},
+        {'$set': {
+            'explanation': explanation,
+            'analysisStatus': analysis_result['analysisStatus'],
+            'analysisCounts': analysis_result['analysisCounts'],
+            'evidenceAnalysis': analysis_result['evidenceAnalysis'],
+            'analysisTimeline': analysis_result['analysisTimeline'],
+            'analysisConflicts': analysis_result['analysisConflicts'],
+            'analysisGaps': analysis_result['analysisGaps'],
+            'analysisRecommendations': analysis_result['analysisRecommendations'],
+            'analysisLastUpdated': analysis_result['analysisLastUpdated'],
+        }}
+    )
     evidence = list(db.evidence.find({'caseId': case_id}))
     for e in evidence:
         e['id'] = str(e.get('_id'))
@@ -247,6 +279,60 @@ def explain_scenario_route(case_id: str, scenario_id: str):
             'analysisLastUpdated': analysis_result['analysisLastUpdated'],
         }}
     )
+    updated = db.scenarios.find_one({'_id': ObjectId(scenario_id)})
+    return serialize_scenario(updated)
+
+
+@router.post('/cases/{case_id}/scenarios/{scenario_id}/evaluate', tags=['scenarios'])
+def evaluate_scenario_route(case_id: str, scenario_id: str):
+    db = get_db()
+    scenario = db.scenarios.find_one({'_id': ObjectId(scenario_id), 'caseId': case_id})
+    if not scenario:
+        raise HTTPException(status_code=404, detail='Scenario not found')
+
+    evidence = list(db.evidence.find({'caseId': case_id}))
+    for e in evidence:
+        e['id'] = str(e.get('_id'))
+        e.pop('_id', None)
+
+    # perform deterministic analysis
+    analysis_result = analyze_scenario(scenario, evidence)
+
+    update = {
+        'analysisStatus': analysis_result['analysisStatus'],
+        'analysisCounts': analysis_result['analysisCounts'],
+        'evidenceAnalysis': analysis_result['evidenceAnalysis'],
+        'analysisTimeline': analysis_result['analysisTimeline'],
+        'analysisConflicts': analysis_result['analysisConflicts'],
+        'analysisGaps': analysis_result['analysisGaps'],
+        'analysisRecommendations': analysis_result['analysisRecommendations'],
+        'analysisLastUpdated': analysis_result['analysisLastUpdated'],
+    }
+    db.scenarios.update_one({'_id': ObjectId(scenario_id)}, {'$set': update})
+    updated = db.scenarios.find_one({'_id': ObjectId(scenario_id)})
+    return serialize_scenario(updated)
+
+
+@router.post('/cases/{case_id}/scenarios/{scenario_id}/reset', tags=['scenarios'])
+def reset_scenario_analysis_route(case_id: str, scenario_id: str):
+    db = get_db()
+    scenario = db.scenarios.find_one({'_id': ObjectId(scenario_id), 'caseId': case_id})
+    if not scenario:
+        raise HTTPException(status_code=404, detail='Scenario not found')
+
+    reset = {
+        'explanation': None,
+        'insights': None,
+        'analysisStatus': 'Not analyzed',
+        'analysisCounts': {'supporting': 0, 'conflicting': 0, 'unresolved': 0},
+        'evidenceAnalysis': [],
+        'analysisTimeline': [],
+        'analysisConflicts': [],
+        'analysisGaps': [],
+        'analysisRecommendations': [],
+        'analysisLastUpdated': None,
+    }
+    db.scenarios.update_one({'_id': ObjectId(scenario_id)}, {'$set': reset})
     updated = db.scenarios.find_one({'_id': ObjectId(scenario_id)})
     return serialize_scenario(updated)
 

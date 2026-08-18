@@ -227,7 +227,44 @@ export const useInvestigationStore = create<InvestigationState>()(
       selectCase: async (caseId) => {
         try {
           const data = await api.getCase(caseId)
-          set({ selectedCaseId: data.id, activeCase: data.title, activeSection: 'Case Info', currentModule: 'Case Info', evidence: data.evidence || [], scenarios: data.scenarios || [], activeScenarioId: data.scenarios?.[0]?.id ?? '', calculations: data.calculations || [], sceneState: data.sceneState || { evidenceIds: [], selectedEvidenceId: null, hasImage: false }, reconstructionGenerated: data.reconstructionGenerated ?? false, summaryGenerated: data.summaryGenerated ?? false, analysisResults: (data.calculations || []).map((c: any) => ({ id: c.id, name: c.title, result: c.result })) })
+          // normalize and deduplicate scenarios by stable id
+          const rawScenarios = data.scenarios || []
+          const scenarioMap = new Map<string, any>()
+          rawScenarios.forEach((s: any) => {
+            if (s && s.id) scenarioMap.set(s.id, s)
+          })
+          const uniqueScenarios = Array.from(scenarioMap.values())
+
+          set({
+            selectedCaseId: data.id,
+            activeCase: data.title,
+            activeSection: 'Case Info',
+            currentModule: 'Case Info',
+            evidence: data.evidence || [],
+            scenarios: uniqueScenarios,
+            activeScenarioId: uniqueScenarios?.[0]?.id ?? '',
+            calculations: data.calculations || [],
+            sceneState: data.sceneState || { evidenceIds: [], selectedEvidenceId: null, hasImage: false },
+            reconstructionGenerated: data.reconstructionGenerated ?? false,
+            summaryGenerated: data.summaryGenerated ?? false,
+            analysisResults: (data.calculations || []).map((c: any) => ({ id: c.id, name: c.title, result: c.result })),
+          })
+          // if any scenarios are not yet evaluated, run evaluateAll to produce deterministic statuses
+          const hasNotAnalyzed = uniqueScenarios.some((s: any) => !s.analysisStatus || (typeof s.analysisStatus === 'string' && s.analysisStatus.toLowerCase().includes('not analyzed')))
+          if (hasNotAnalyzed) {
+            try {
+              await api.evaluateAllScenarios(data.id)
+              // refresh case to pick up updated scenarios
+              const refreshed = await api.getCase(caseId)
+              const rawScenarios2 = refreshed.scenarios || []
+              const map2 = new Map<string, any>()
+              rawScenarios2.forEach((ss: any) => { if (ss && ss.id) map2.set(ss.id, ss) })
+              const uniqueScenarios2 = Array.from(map2.values())
+              set({ scenarios: uniqueScenarios2, activeScenarioId: uniqueScenarios2?.[0]?.id ?? '' })
+            } catch (err) {
+              console.error('Auto-evaluate scenarios failed', err)
+            }
+          }
         } catch (err) {
           console.error('Select case failed', err)
         }
@@ -365,6 +402,17 @@ export const useInvestigationStore = create<InvestigationState>()(
           throw err
         }
       },
+        resetScenario: async (scenarioId: string) => {
+          const caseId = get().selectedCaseId
+          if (!caseId) throw new Error('No selected case')
+          try {
+            await api.resetScenario(caseId, scenarioId)
+            await get().selectCase(caseId)
+          } catch (err) {
+            console.error('Reset scenario failed', err)
+            throw err
+          }
+        },
       evaluateAllScenarios: async () => {
         const caseId = get().selectedCaseId
         if (!caseId) throw new Error('No selected case')

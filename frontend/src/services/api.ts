@@ -43,6 +43,7 @@ export const api = {
   explainScenario: (caseId: string, scenarioId: string) => request(`/cases/${caseId}/scenarios/${scenarioId}/explain`, { method: 'POST' }),
   generateScenarioInsights: (caseId: string, scenarioId: string) => request(`/cases/${caseId}/scenarios/${scenarioId}/insights`, { method: 'POST' }),
   evaluateScenario: (caseId: string, scenarioId: string) => request(`/cases/${caseId}/scenarios/${scenarioId}/evaluate`, { method: 'POST' }),
+  resetScenario: (caseId: string, scenarioId: string) => request(`/cases/${caseId}/scenarios/${scenarioId}/reset`, { method: 'POST' }),
   evaluateAllScenarios: (caseId: string) => request(`/cases/${caseId}/scenarios/evaluateAll`, { method: 'POST' }),
 
   runAnalysis: (caseId: string) => request(`/cases/${caseId}/analysis/run`, { method: 'POST' }),

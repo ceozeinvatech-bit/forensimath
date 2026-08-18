@@ -84,17 +84,21 @@ def _time_to_seconds(value: Any) -> Optional[int]:
         text = str(value).strip()
         if not text:
             return None
-        # try HH:MM or HH:MM:SS
+        # Try ISO format first (e.g., 2026-08-18T18:10:00)
+        try:
+            dt = datetime.fromisoformat(text)
+            return dt.hour * 3600 + dt.minute * 60 + dt.second
+        except Exception:
+            pass
+
+        # Fallback: try HH:MM or HH:MM:SS
         parts = text.split(':')
-        if len(parts) == 2:
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
             h, m = int(parts[0]), int(parts[1])
             return h * 3600 + m * 60
-        if len(parts) == 3:
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit() and parts[2].isdigit():
             h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
             return h * 3600 + m * 60 + s
-        # try ISO format
-        dt = datetime.fromisoformat(text)
-        return dt.hour * 3600 + dt.minute * 60 + dt.second
     except Exception:
         return None
 
@@ -168,7 +172,8 @@ def _missing_fields_for_evidence(evidence: Dict[str, Any]) -> List[str]:
     if not pos or _parse_number(pos.get('x')) is None or _parse_number(pos.get('y')) is None or _parse_number(pos.get('z')) is None:
         missing.append('position')
     measurements = evidence.get('measurements', {}) or {}
-    if _parse_number(measurements.get('direction')) is None and not measurements.get('orientation') and not measurements.get('angle'):
+    # direction can be represented as a textual label (e.g., 'NE') or numeric orientation/angle
+    if not (measurements.get('direction') or measurements.get('orientation') or measurements.get('angle')):
         missing.append('direction')
     if _time_to_seconds(measurements.get('timestamp') or measurements.get('time')) is None:
         missing.append('timestamp')
@@ -179,7 +184,9 @@ def _parse_evidence_values(evidence: Dict[str, Any]) -> Dict[str, Any]:
     measurements = evidence.get('measurements', {}) or {}
     observed = {}
     observed['position'] = evidence.get('position')
-    observed['distance'] = _parse_number(measurements.get('distance') or measurements.get('length') or measurements.get('width'))
+    # Only treat an explicit 'distance' measurement as a distance in metres.
+    # Do not substitute footprint length/width (mm) for spatial distance.
+    observed['distance'] = _parse_number(measurements.get('distance'))
     observed_dir = measurements.get('direction') or measurements.get('orientation') or measurements.get('angle')
     if observed_dir is not None:
         observed_dir = _normalize_direction(observed_dir)
@@ -228,6 +235,7 @@ def analyze_scenario(scenario: Dict[str, Any], evidence_list: List[Dict[str, Any
         record_severity = None
         field_explanations = []
         differences = []
+        field_statuses: List[str] = []
         missing = _missing_fields_for_evidence(evidence)
         if missing:
             field_explanations.append(f"This evidence cannot be classified because the required {', '.join(missing)} information is unavailable.")
@@ -262,6 +270,7 @@ def analyze_scenario(scenario: Dict[str, Any], evidence_list: List[Dict[str, Any
                 })
                 record_severity = field_severity
             differences.append(f"distance: {diff:.1f} m")
+        field_statuses.append(field_status)
 
         # position comparison
         if observed.get('position') is None:
@@ -295,6 +304,7 @@ def analyze_scenario(scenario: Dict[str, Any], evidence_list: List[Dict[str, Any
                 })
                 record_severity = record_severity or field_severity
             differences.append(f"position: {dist_to_path:.1f} m")
+        field_statuses.append(field_status)
 
         # direction comparison
         if observed.get('direction') is None:
@@ -340,6 +350,7 @@ def analyze_scenario(scenario: Dict[str, Any], evidence_list: List[Dict[str, Any
                 else:
                     field_status = 'UNRESOLVED'
             differences.append(f"direction")
+        field_statuses.append(field_status)
 
         # timestamp comparison
         if observed.get('timestamp') is None:
@@ -373,11 +384,12 @@ def analyze_scenario(scenario: Dict[str, Any], evidence_list: List[Dict[str, Any
                 })
                 record_severity = record_severity or field_severity
             differences.append(f"time: {time_diff // 60} min")
+        field_statuses.append(field_status)
 
-        # derive overall status
-        if any('CONFLICTING' in exp for exp in field_explanations):
+        # derive overall status from per-field statuses
+        if any(fs == 'CONFLICTING' for fs in field_statuses):
             record_status = 'CONFLICTING'
-        elif any('SUPPORTING' in exp for exp in field_explanations):
+        elif any(fs == 'SUPPORTING' for fs in field_statuses):
             record_status = 'SUPPORTING'
         else:
             record_status = 'UNRESOLVED'
@@ -443,17 +455,23 @@ def analyze_scenario(scenario: Dict[str, Any], evidence_list: List[Dict[str, Any
     if conflicts:
         recommendations.append('Review the conflicting evidence items together before drawing conclusions.')
 
-    # status rules
+    # Deterministic status rules (explicit and simple). Map to final human-facing labels:
+    # - Possible: no conflicts, at least one supporting (or supporting > 0)
+    # - Not possible based on current evidence: more conflicts than supporting
+    # - Cannot determine: no supporting/conflicting but unresolved items exist
+    # - Partially supported -> treat as Possible (partial)
+    # - Analysis pending/fallback -> Cannot determine
     if conflicting == 0 and supporting > 0:
-        overall_status = 'Consistent with available evidence'
-    elif conflicting > 0 and conflicting <= supporting:
-        overall_status = 'Partially supported'
+        overall_status = 'Possible'
     elif conflicting > supporting:
-        overall_status = 'Contains significant conflicts'
+        overall_status = 'Not possible based on current evidence'
+    elif conflicting > 0 and supporting > 0:
+        # mixed signals: treat as possible but partial
+        overall_status = 'Possible (partial)'
     elif supporting == 0 and unresolved > 0:
-        overall_status = 'Insufficient evidence'
+        overall_status = 'Cannot determine'
     else:
-        overall_status = 'Analysis pending'
+        overall_status = 'Cannot determine'
 
     return {
         'analysisStatus': overall_status,

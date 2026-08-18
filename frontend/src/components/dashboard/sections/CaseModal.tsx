@@ -121,7 +121,8 @@ export default function CaseModal({ isOpen, mode, onClose }: CaseModalProps) {
             </div>
           </div>
         ) : (
-          <div className="mt-4 space-y-3">
+          <div className="mt-4">
+            <div className="space-y-3 max-h-[50vh] overflow-auto pr-2">
             {cases.length === 0 ? (
               <div className="rounded border border-dashed border-forensic-border bg-forensic-surface/30 p-4 text-sm text-slate-400">
                 No cases are available yet. Create one to start the investigation flow.
@@ -180,6 +181,7 @@ export default function CaseModal({ isOpen, mode, onClose }: CaseModalProps) {
                 )
               })
             )}
+            </div>
           </div>
         )}
 

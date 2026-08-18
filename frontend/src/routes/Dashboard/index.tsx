@@ -6,7 +6,6 @@ import InvestigationProgress from '../../components/dashboard/InvestigationProgr
 import CaseInfoSection from '../../components/dashboard/sections/CaseInfoSection'
 import EvidenceSection from '../../components/dashboard/sections/EvidenceSection'
 import MathEngineSection from '../../components/dashboard/sections/MathEngineSection'
-import OpenCVSection from '../../components/dashboard/sections/OpenCVSection'
 import ScenariosSection from '../../components/dashboard/sections/ScenariosSection'
 import Scene2DSection from '../../components/dashboard/sections/Scene2DSection'
 import TimelineSection from '../../components/dashboard/sections/TimelineSection'
@@ -151,8 +150,7 @@ export default function Dashboard() {
         return <EvidenceSection />
       case 'Math Engine':
         return <MathEngineSection />
-      case 'OpenCV':
-        return <OpenCVSection />
+      
       case 'Scenarios':
         return <ScenariosSection />
       case '2D Scene':
