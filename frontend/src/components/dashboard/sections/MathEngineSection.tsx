@@ -28,7 +28,6 @@ export default function MathEngineSection() {
   const validCoordinates = evidence.filter((item) => Number.isFinite(item.position.x) && Number.isFinite(item.position.z))
   const mathEvidence = selectedMeasurementIds.length ? evidence.filter((item) => selectedMeasurementIds.includes(item.id)) : evidence
   const evidenceWithMeasurements = evidence.filter((item) => Object.values(item.measurements).some((value) => Boolean(value)))
-  const evidenceWithOrientation = evidence.filter((item) => Boolean(item.measurements.orientation) || Boolean(item.measurements.direction))
   const footprintEvidence = evidence.filter((item) => {
     const t = (item.type || '').toString().toLowerCase()
     return t === 'footprint' || t === 'footwear impression' || t.includes('foot')
@@ -44,13 +43,6 @@ export default function MathEngineSection() {
   const widthValues = useMemo(() => {
     const values = mathEvidence
       .map((item) => parseFloat(item.measurements.width?.replace(/[^0-9.]/g, '') ?? ''))
-      .filter((value) => Number.isFinite(value))
-    return values
-  }, [mathEvidence])
-
-  const orientationValues = useMemo(() => {
-    const values = mathEvidence
-      .map((item) => parseFloat((item.measurements.orientation ?? item.measurements.direction ?? '').replace(/[^0-9.]/g, '') ?? ''))
       .filter((value) => Number.isFinite(value))
     return values
   }, [mathEvidence])
@@ -72,7 +64,6 @@ export default function MathEngineSection() {
 
   const lengthStats = stats(numericMeasurements)
   const widthStats = stats(widthValues)
-  const orientationStats = stats(orientationValues)
 
   const relationshipRows = useMemo(() => {
     const rows = [] as Array<{ id: string; from: string; to: string; distance: number | null; angle: number | null; relation: string }>
@@ -214,7 +205,6 @@ export default function MathEngineSection() {
           <ul className="grid gap-2 md:grid-cols-2">
             <li className="rounded-xl border border-forensic-border bg-forensic-surface/40 p-3 text-sm text-forensic-text/70">{validCoordinates.length} evidence items have valid spatial coordinates.</li>
             <li className="rounded-xl border border-forensic-border bg-forensic-surface/40 p-3 text-sm text-forensic-text/70">{evidenceWithMeasurements.length} evidence items contain measurements.</li>
-            <li className="rounded-xl border border-forensic-border bg-forensic-surface/40 p-3 text-sm text-forensic-text/70">{evidenceWithOrientation.length} evidence items contain orientation values.</li>
             <li className="rounded-xl border border-forensic-border bg-forensic-surface/40 p-3 text-sm text-forensic-text/70">{relationshipRows.length} mathematical relationships are currently available.</li>
           </ul>
         </div>
@@ -375,39 +365,10 @@ export default function MathEngineSection() {
                     {widthValues.length > 1 ? <div className="mt-3 h-40"><ResponsiveContainer width="100%" height="100%"><LineChart data={widthValues.map((value, index) => ({ index: index + 1, value }))}><CartesianGrid stroke="rgba(148,163,184,0.15)" vertical={false} /><XAxis dataKey="index" tick={false} /><YAxis tick={false} /><Tooltip /><Line type="monotone" dataKey="value" stroke="#4fd1ff" strokeWidth={2} /></LineChart></ResponsiveContainer></div> : <p className="mt-4 text-sm text-forensic-text/70">{widthValues.length === 1 ? 'One valid width measurement is available; showing it as a single measurement.' : 'No width measurements available.'}</p>}
                     <p className="mt-2 text-sm text-forensic-text/70">Mean {formatMeasurement(widthStats.mean)} mm · Range {formatMeasurement(widthStats.min)}–{formatMeasurement(widthStats.max)} mm · Variation {formatMeasurement(widthStats.stdDev)} mm</p>
                   </div>
-                  <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-4">
-                    <p className="text-sm font-medium text-forensic-text">Orientation</p>
-                    {orientationValues.length > 1 ? <div className="mt-3 h-40"><ResponsiveContainer width="100%" height="100%"><LineChart data={orientationValues.map((value, index) => ({ index: index + 1, value }))}><CartesianGrid stroke="rgba(148,163,184,0.15)" vertical={false} /><XAxis dataKey="index" tick={false} /><YAxis tick={false} /><Tooltip /><Line type="monotone" dataKey="value" stroke="#f7b84a" strokeWidth={2} /></LineChart></ResponsiveContainer></div> : <p className="mt-4 text-sm text-forensic-text/70">{orientationValues.length === 1 ? 'One valid orientation measurement is available.' : 'No orientation measurements available.'}</p>}
-                    <p className="mt-2 text-sm text-forensic-text/70">Mean {formatMeasurement(orientationStats.mean)}° · Range {formatMeasurement(orientationStats.min)}–{formatMeasurement(orientationStats.max)}° · Variation {formatMeasurement(orientationStats.stdDev)}°</p>
-                  </div>
                 </div>
               </div>
             )}
           </>
-        )}
-
-        {evidenceWithOrientation.length > 0 && (
-          <div className="rounded-2xl border border-forensic-border bg-forensic-panel/70 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-forensic-muted">Directional Analysis</p>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-                {evidenceWithOrientation.map((item) => {
-                const orientation = parseFloat((item.measurements.orientation ?? item.measurements.direction ?? '').replace(/[^0-9.]/g, '') ?? '')
-                return (
-                  <div key={item.id} className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-4">
-                    <p className="text-sm font-medium text-forensic-text">{item.label} orientation</p>
-                    <p className="mt-2 text-sm text-forensic-text/70">{orientation.toFixed(1)}°</p>
-                    <div className="mt-3 h-24 w-full rounded-2xl border border-forensic-border bg-forensic-panel/60 p-3">
-                      <svg viewBox="0 0 220 80" className="h-full w-full">
-                        <circle cx="110" cy="40" r="26" fill="none" stroke="#64748b" strokeWidth="1.2" />
-                        <line x1="110" y1="40" x2="140" y2="24" stroke="#f7b84a" strokeWidth="2" />
-                        <line x1="110" y1="40" x2="110" y2="14" stroke="#4fd1ff" strokeWidth="1.2" />
-                      </svg>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
         )}
 
         {footprintEvidence.length >= 2 && (
@@ -543,7 +504,7 @@ export default function MathEngineSection() {
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-3 text-sm text-forensic-text/70">Coordinates: {validCoordinates.length} / {evidence.length}</div>
             <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-3 text-sm text-forensic-text/70">Measurements: {evidenceWithMeasurements.length} / {evidence.length}</div>
-            <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-3 text-sm text-forensic-text/70">Orientation: {evidenceWithOrientation.length} / {evidence.length}</div>
+            <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-3 text-sm text-forensic-text/70">Notes recorded: {evidence.filter((item) => Boolean(item.measurements.notes)).length} / {evidence.length}</div>
             <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-3 text-sm text-forensic-text/70">Analysis readiness: {analysisState.status === 'complete' ? 'READY' : 'PENDING'}</div>
           </div>
         </div>
