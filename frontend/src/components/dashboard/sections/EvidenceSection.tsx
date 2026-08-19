@@ -16,6 +16,35 @@ type EvidenceFormState = {
   notes: string
 }
 
+type MeasurementField = 'length' | 'width' | 'majorAxis' | 'minorAxis' | 'notes'
+
+const measurementFieldsForType = (type: string): MeasurementField[] => {
+  switch (type) {
+    case 'Footprint':
+    case 'Footwear Impression':
+      return ['length', 'width', 'notes']
+    case 'Simulated Stain':
+      return ['majorAxis', 'minorAxis', 'notes']
+    case 'Object':
+      return ['length', 'width', 'notes']
+    case 'Measurement':
+      return ['notes']
+    case 'Position':
+    case 'Trajectory':
+    case 'Custom':
+    default:
+      return ['notes']
+  }
+}
+
+const measurementLabels: Record<MeasurementField, string> = {
+  length: 'Length (mm)',
+  width: 'Width (mm)',
+  majorAxis: 'Major axis (mm)',
+  minorAxis: 'Minor axis (mm)',
+  notes: 'Measurement notes',
+}
+
 const emptyForm: EvidenceFormState = {
   label: '',
   type: 'Footprint',
@@ -63,18 +92,19 @@ export default function EvidenceSection() {
       return
     }
 
+    const fields = measurementFieldsForType(form.type)
+    const measurements = fields.reduce<Record<string, string>>((result, field) => {
+      const value = form[field].trim()
+      if (value) result[field] = value
+      return result
+    }, {})
+
     addEvidence({
       label: form.label.trim(),
       type: form.type,
       description: form.description.trim(),
       position: { x: numericX, y: numericY, z: numericZ },
-      measurements: {
-        length: form.length || undefined,
-        width: form.width || undefined,
-        majorAxis: form.majorAxis || undefined,
-        minorAxis: form.minorAxis || undefined,
-        notes: form.notes || undefined,
-      },
+      measurements,
     })
 
     setForm(emptyForm)
@@ -185,7 +215,7 @@ export default function EvidenceSection() {
                 Type
                 <select
                   value={form.type}
-                  onChange={(event) => setForm({ ...form, type: event.target.value })}
+                  onChange={(event) => setForm({ ...form, type: event.target.value, length: '', width: '', majorAxis: '', minorAxis: '', notes: '' })}
                   className="mt-1 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm text-forensic-text outline-none"
                 >
                   {evidenceTypes.map((type) => (
@@ -227,46 +257,26 @@ export default function EvidenceSection() {
                   className="mt-1 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm text-forensic-text outline-none"
                 />
               </label>
-              <label className="text-sm text-slate-400">
-                Length
-                <input
-                  value={form.length}
-                  onChange={(event) => setForm({ ...form, length: event.target.value })}
-                  className="mt-1 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm text-forensic-text outline-none"
-                />
-              </label>
-              <label className="text-sm text-slate-400">
-                Width
-                <input
-                  value={form.width}
-                  onChange={(event) => setForm({ ...form, width: event.target.value })}
-                  className="mt-1 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm text-forensic-text outline-none"
-                />
-              </label>
-              <label className="text-sm text-slate-400">
-                Major Axis
-                <input
-                  value={form.majorAxis}
-                  onChange={(event) => setForm({ ...form, majorAxis: event.target.value })}
-                  className="mt-1 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm text-forensic-text outline-none"
-                />
-              </label>
-              <label className="text-sm text-slate-400">
-                Minor Axis
-                <input
-                  value={form.minorAxis}
-                  onChange={(event) => setForm({ ...form, minorAxis: event.target.value })}
-                  className="mt-1 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm text-forensic-text outline-none"
-                />
-              </label>
-              <label className="md:col-span-2 text-sm text-slate-400">
-                Notes
-                <input
-                  value={form.notes}
-                  onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                  className="mt-1 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm text-forensic-text outline-none"
-                />
-              </label>
+              {measurementFieldsForType(form.type).map((field) => (
+                <label key={field} className={`${field === 'notes' ? 'md:col-span-2' : ''} text-sm text-slate-400`}>
+                  {measurementLabels[field]}
+                  {field === 'notes' ? (
+                    <textarea
+                      value={form[field]}
+                      onChange={(event) => setForm({ ...form, [field]: event.target.value })}
+                      placeholder="Describe the recorded measurement or its quality."
+                      className="mt-1 min-h-20 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm text-forensic-text outline-none"
+                    />
+                  ) : (
+                    <input
+                      value={form[field]}
+                      onChange={(event) => setForm({ ...form, [field]: event.target.value })}
+                      placeholder={`Example: ${field === 'length' ? '270 mm' : field === 'width' ? '102 mm' : field === 'majorAxis' ? '180 mm' : '95 mm'}`}
+                      className="mt-1 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm text-forensic-text outline-none"
+                    />
+                  )}
+                </label>
+              ))}
             </div>
 
             {validationMessage && <p className="mt-4 text-sm text-amber-500">{validationMessage}</p>}
