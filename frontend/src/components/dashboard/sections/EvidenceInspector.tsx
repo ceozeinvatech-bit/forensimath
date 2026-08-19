@@ -33,10 +33,9 @@ export default function EvidenceInspector({ selectedEvidenceId }: EvidenceInspec
         </div>
         {measurements.length && <p>Length: {measurements.length}</p>}
         {measurements.width && <p>Width: {measurements.width}</p>}
-        {measurements.orientation && <p>Orientation: {measurements.orientation}</p>}
-        {measurements.angle && <p>Angle: {measurements.angle}</p>}
         {measurements.majorAxis && <p>Major Axis: {measurements.majorAxis}</p>}
         {measurements.minorAxis && <p>Minor Axis: {measurements.minorAxis}</p>}
+        {measurements.notes && <p>Notes: {measurements.notes}</p>}
         <p>Distance to reference (2.4,3.1): {distanceToReference} m</p>
       </div>
 
