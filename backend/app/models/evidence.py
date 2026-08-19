@@ -12,10 +12,7 @@ class Measurements(BaseModel):
     majorAxis: Optional[str] = None
     minorAxis: Optional[str] = None
     notes: Optional[str] = None
-    orientation: Optional[str] = None
-    angle: Optional[str] = None
     radius: Optional[str] = None
-    direction: Optional[str] = None
 
 class EvidenceCreate(BaseModel):
     label: str
