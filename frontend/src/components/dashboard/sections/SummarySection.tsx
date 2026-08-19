@@ -15,7 +15,7 @@ export default function SummarySection() {
   const summaryGenerated = useInvestigationStore((state) => state.summaryGenerated)
   const summaryText = useInvestigationStore((state) => state.summaryText)
   const lengthAverage = useMemo(() => average(evidence.map((item) => value(item.measurements.length)).filter((item): item is number => item !== null)), [evidence])
-  const gaps = evidence.flatMap((item) => [!item.measurements.orientation && !item.measurements.direction ? `${item.label} direction unavailable` : null, !item.measurements.timestamp ? `${item.label} timestamp unavailable` : null].filter(Boolean) as string[])
+  const gaps = evidence.filter((item) => !Object.values(item.measurements).some(Boolean)).map((item) => `${item.label} has no recorded measurement notes or dimensions.`)
   const strongest = scenarios.find((scenario) => scenario.analysisStatus && !scenario.analysisStatus.toLowerCase().includes('not analyzed'))
   const strongestCounts = strongest?.analysisCounts
   return <SectionShell title="SUMMARY" subtitle="Investigation report from recorded evidence" action={<div className="flex flex-wrap gap-2"><button type="button" onClick={() => void generateSummary()} className="flex items-center gap-2 border border-forensic-amber/50 bg-forensic-amber/10 px-3 py-2 text-xs font-semibold text-forensic-amber"><FileText className="h-3.5 w-3.5" />{summaryGenerated ? 'Summary Ready' : 'Generate Summary'}</button><button type="button" onClick={() => window.print()} aria-label="Print report" className="border border-forensic-border px-3 py-2"><Printer className="h-4 w-4" /></button></div>}>
