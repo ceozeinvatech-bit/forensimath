@@ -14,10 +14,7 @@ type EvidenceItem = {
     majorAxis?: string
     minorAxis?: string
     notes?: string
-    orientation?: string
-    angle?: string
     radius?: string
-    direction?: string
   }
 }
 
