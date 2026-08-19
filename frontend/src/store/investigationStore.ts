@@ -121,41 +121,6 @@ type InvestigationState = {
   generateSummary: () => Promise<void>
 }
 
-<<<<<<< HEAD
-const parseMeasurementValue = (value?: string) => {
-  if (!value) return null
-  const match = value.match(/-?\d+(?:\.\d+)?/)
-  return match ? Number(match[0]) : null
-}
-
-const createEmptyCaseState = () => ({
-  selectedCaseId: '',
-  activeCase: 'No Case Selected',
-  activeSection: 'Case Info',
-  currentModule: 'Case Info',
-  evidence: [] as EvidenceItem[],
-  scenarios: [] as ScenarioItem[],
-  activeScenarioId: '',
-  calculations: [] as CalculationItem[],
-  sceneState: { evidenceIds: [] as string[], selectedEvidenceId: null as string | null, hasImage: false },
-  reconstructionGenerated: false,
-  summaryGenerated: false,
-      summaryText: '',
-  analysisState: {
-    isRunning: false,
-    status: 'idle' as const,
-    completedCount: 0,
-    totalCount: 0,
-    progressItems: [] as Array<{ id: string; label: string; status: AnalysisStepStatus }>,
-    lastRunAt: null as string | null,
-  },
-})
-
-// track autogen requests per-case in this session to avoid duplicate triggers
-const autogenTriggered = new Set<string>()
-
-=======
->>>>>>> 8f943c6 (Improve scenarios, math engine and 2D scene)
 export const useInvestigationStore = create<InvestigationState>()(
   persist(
     (set, get) => ({
@@ -224,11 +189,7 @@ export const useInvestigationStore = create<InvestigationState>()(
           const created = await api.createCase(body)
           const nextCases = [...get().cases, created]
           set({ cases: nextCases, selectedCaseId: created.id, activeCase: created.title, evidence: created.evidence ?? [], scenarios: created.scenarios ?? [], calculations: created.calculations ?? [] })
-<<<<<<< HEAD
-          // ensure UI selects the newly created case so downstream logic (like autogen) can run
-=======
           // Select the newly created case without creating or evaluating scenarios.
->>>>>>> 8f943c6 (Improve scenarios, math engine and 2D scene)
           try {
             await get().selectCase(created.id)
           } catch (err) {
@@ -268,49 +229,6 @@ export const useInvestigationStore = create<InvestigationState>()(
             summaryGenerated: data.summaryGenerated ?? false,
             analysisResults: (data.calculations || []).map((c: any) => ({ id: c.id, name: c.title, result: c.result })),
           })
-<<<<<<< HEAD
-          // If the case currently has no scenarios but does have evidence, trigger the autogen endpoint once
-          try {
-            const hasScenarios = uniqueScenarios.length > 0
-            const evidenceCount = (data.evidence || []).length
-            if (!hasScenarios && evidenceCount > 0 && !autogenTriggered.has(data.id)) {
-              autogenTriggered.add(data.id)
-              try {
-                await api.autoGenerateScenarios(data.id)
-                // refresh case to pick up generated scenarios
-                const refreshedAfterGen = await api.getCase(caseId)
-                const rawScenarios2 = refreshedAfterGen.scenarios || []
-                const map2 = new Map<string, any>()
-                rawScenarios2.forEach((ss: any) => { if (ss && ss.id) map2.set(ss.id, ss) })
-                const uniqueScenarios2 = Array.from(map2.values())
-                set({ scenarios: uniqueScenarios2, activeScenarioId: uniqueScenarios2?.[0]?.id ?? '' })
-              } catch (err) {
-                // autogen failed — log and allow user to retry manually
-                console.error('Auto-generate scenarios failed', err)
-                autogenTriggered.delete(data.id)
-              }
-            }
-          } catch (err) {
-            console.error('Autogen trigger check failed', err)
-          }
-          // if any scenarios are not yet evaluated, run evaluateAll to produce deterministic statuses
-          const hasNotAnalyzed = uniqueScenarios.some((s: any) => !s.analysisStatus || (typeof s.analysisStatus === 'string' && s.analysisStatus.toLowerCase().includes('not analyzed')))
-          if (hasNotAnalyzed) {
-            try {
-              await api.evaluateAllScenarios(data.id)
-              // refresh case to pick up updated scenarios
-              const refreshed = await api.getCase(caseId)
-              const rawScenarios2 = refreshed.scenarios || []
-              const map2 = new Map<string, any>()
-              rawScenarios2.forEach((ss: any) => { if (ss && ss.id) map2.set(ss.id, ss) })
-              const uniqueScenarios2 = Array.from(map2.values())
-              set({ scenarios: uniqueScenarios2, activeScenarioId: uniqueScenarios2?.[0]?.id ?? '' })
-            } catch (err) {
-              console.error('Auto-evaluate scenarios failed', err)
-            }
-          }
-=======
->>>>>>> 8f943c6 (Improve scenarios, math engine and 2D scene)
         } catch (err) {
           console.error('Select case failed', err)
         }
