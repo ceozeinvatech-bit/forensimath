@@ -300,7 +300,9 @@ export default function Scene2DSection() {
                 <div style={{ fontSize: 11, opacity: 0.8 }}>Z: {hoverInfo.item.position.z.toFixed(1)}</div>
                 {hoverInfo.item.measurements?.length && <div style={{ fontSize: 11, opacity: 0.8 }}>Length: {hoverInfo.item.measurements.length}</div>}
                 {hoverInfo.item.measurements?.width && <div style={{ fontSize: 11, opacity: 0.8 }}>Width: {hoverInfo.item.measurements.width}</div>}
-                {hoverInfo.item.measurements?.direction && <div style={{ fontSize: 11, opacity: 0.8 }}>Direction: {hoverInfo.item.measurements.direction}</div>}
+                {hoverInfo.item.measurements?.majorAxis && <div style={{ fontSize: 11, opacity: 0.8 }}>Major axis: {hoverInfo.item.measurements.majorAxis}</div>}
+                {hoverInfo.item.measurements?.minorAxis && <div style={{ fontSize: 11, opacity: 0.8 }}>Minor axis: {hoverInfo.item.measurements.minorAxis}</div>}
+                {hoverInfo.item.measurements?.notes && <div style={{ fontSize: 11, opacity: 0.8 }}>Notes: {hoverInfo.item.measurements.notes}</div>}
               </div>
             )}
             </div>
