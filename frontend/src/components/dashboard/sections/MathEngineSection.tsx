@@ -1,4 +1,4 @@
-import { Activity, BarChart3, Compass, Gauge, Layers3, PlayCircle, ScanSearch, Sparkles, Waypoints } from 'lucide-react'
+import { BarChart3, Gauge, Layers3, PlayCircle, ScanSearch, Waypoints, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { ResponsiveContainer, Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis, Line, LineChart } from 'recharts'
 import { useInvestigationStore } from '../../../store/investigationStore'
@@ -20,11 +20,13 @@ export default function MathEngineSection() {
   const [filter, setFilter] = useState<FilterKey>('All')
   const [searchTerm, setSearchTerm] = useState('')
   const [showMeasurementCharts, setShowMeasurementCharts] = useState(true)
+  const [selectedMeasurementIds, setSelectedMeasurementIds] = useState<string[]>([])
 
   // use selected case dimensions if available so plots scale to case units
   const selectedCase = useInvestigationStore((state) => state.cases.find((c) => c.id === state.selectedCaseId))
   const plotBounds = { width: selectedCase?.dimensions?.width ?? 12, depth: selectedCase?.dimensions?.depth ?? 8 }
   const validCoordinates = evidence.filter((item) => Number.isFinite(item.position.x) && Number.isFinite(item.position.z))
+  const mathEvidence = selectedMeasurementIds.length ? evidence.filter((item) => selectedMeasurementIds.includes(item.id)) : evidence
   const evidenceWithMeasurements = evidence.filter((item) => Object.values(item.measurements).some((value) => Boolean(value)))
   const evidenceWithOrientation = evidence.filter((item) => Boolean(item.measurements.orientation) || Boolean(item.measurements.direction))
   const footprintEvidence = evidence.filter((item) => {
@@ -33,25 +35,25 @@ export default function MathEngineSection() {
   })
 
   const numericMeasurements = useMemo(() => {
-    const values = evidence
+    const values = mathEvidence
       .map((item) => parseFloat(item.measurements.length?.replace(/[^0-9.]/g, '') ?? ''))
       .filter((value) => Number.isFinite(value))
     return values
-  }, [evidence])
+  }, [mathEvidence])
 
   const widthValues = useMemo(() => {
-    const values = evidence
+    const values = mathEvidence
       .map((item) => parseFloat(item.measurements.width?.replace(/[^0-9.]/g, '') ?? ''))
       .filter((value) => Number.isFinite(value))
     return values
-  }, [evidence])
+  }, [mathEvidence])
 
   const orientationValues = useMemo(() => {
-    const values = evidence
+    const values = mathEvidence
       .map((item) => parseFloat((item.measurements.orientation ?? item.measurements.direction ?? '').replace(/[^0-9.]/g, '') ?? ''))
       .filter((value) => Number.isFinite(value))
     return values
-  }, [evidence])
+  }, [mathEvidence])
 
   const stats = (values: number[]) => {
     if (values.length === 0) {
@@ -74,10 +76,10 @@ export default function MathEngineSection() {
 
   const relationshipRows = useMemo(() => {
     const rows = [] as Array<{ id: string; from: string; to: string; distance: number | null; angle: number | null; relation: string }>
-    for (let i = 0; i < evidence.length; i += 1) {
-      for (let j = i + 1; j < evidence.length; j += 1) {
-        const first = evidence[i]
-        const second = evidence[j]
+    for (let i = 0; i < mathEvidence.length; i += 1) {
+      for (let j = i + 1; j < mathEvidence.length; j += 1) {
+        const first = mathEvidence[i]
+        const second = mathEvidence[j]
         if (!Number.isFinite(first.position.x) || !Number.isFinite(first.position.z) || !Number.isFinite(second.position.x) || !Number.isFinite(second.position.z)) {
           continue
         }
@@ -93,7 +95,7 @@ export default function MathEngineSection() {
       }
     }
     return rows
-  }, [evidence])
+  }, [mathEvidence])
 
   const filteredCalculations = useMemo(() => {
     const search = searchTerm.trim().toLowerCase()
@@ -104,9 +106,13 @@ export default function MathEngineSection() {
       const title = (calculation.title ?? '').toString().toLowerCase()
       const inputs = (calculation.inputs ?? '').toString().toLowerCase()
       const matchesSearch = !search || title.includes(search) || inputs.includes(search)
-      return matchesFilter && matchesSearch
+      const matchesEvidence = !selectedMeasurementIds.length || selectedMeasurementIds.some((id) => {
+        const item = evidence.find((entry) => entry.id === id)
+        return calculation.evidenceId === id || Boolean(item && `${calculation.title} ${calculation.inputs}`.includes(item.label))
+      })
+      return matchesFilter && matchesSearch && matchesEvidence
     })
-  }, [calculations, filter, searchTerm])
+  }, [calculations, evidence, filter, searchTerm, selectedMeasurementIds])
 
   // Group calculations by evidence label so UI never shows internal IDs as the primary label
   const groupedCalculations = useMemo(() => {
@@ -341,6 +347,13 @@ export default function MathEngineSection() {
 
         {evidenceWithMeasurements.length > 0 && (
           <>
+            <div className="rounded-2xl border border-forensic-border bg-forensic-panel/70 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-forensic-muted">Evidence filter</p><p className="mt-1 text-sm text-forensic-text/70">Show calculations for selected evidence only.</p></div>
+                {selectedMeasurementIds.length > 0 && <button type="button" onClick={() => setSelectedMeasurementIds([])} className="flex items-center gap-1 border border-forensic-border px-3 py-1.5 text-xs"><X className="h-3.5 w-3.5" />Clear selection</button>}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">{evidence.map((item) => <button type="button" key={item.id} onClick={() => setSelectedMeasurementIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} className={`border px-3 py-1.5 text-xs ${selectedMeasurementIds.includes(item.id) ? 'border-forensic-amber bg-forensic-amber/10 text-forensic-amber' : 'border-forensic-border'}`}>{item.label}</button>)}</div>
+            </div>
             <div className="mt-2 flex items-center gap-3">
               <label className="flex items-center gap-2 text-sm text-forensic-text/70">
                 <input type="checkbox" checked={showMeasurementCharts} onChange={(e) => setShowMeasurementCharts(e.target.checked)} />
@@ -354,24 +367,18 @@ export default function MathEngineSection() {
                 <div className="mt-4 grid gap-4 xl:grid-cols-3">
                   <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-4">
                     <p className="text-sm font-medium text-forensic-text">Length</p>
-                    <div className="mt-3 h-40">
-                      <ResponsiveContainer width="100%" height="100%"><LineChart data={numericMeasurements.length > 0 ? numericMeasurements.map((value, index) => ({ index: index + 1, value })) : [{ index: 0, value: 0 }]}><CartesianGrid stroke="rgba(148,163,184,0.15)" vertical={false} /><XAxis dataKey="index" tick={false} /><YAxis tick={false} /><Tooltip /><Line type="monotone" dataKey="value" stroke="#f7b84a" strokeWidth={2} /></LineChart></ResponsiveContainer>
-                    </div>
-                    <p className="mt-2 text-sm text-forensic-text/70">Mean {formatMeasurement(lengthStats.mean)} mm · Range {formatMeasurement(lengthStats.min)}–{formatMeasurement(lengthStats.max)} mm · Std Dev {formatMeasurement(lengthStats.stdDev)} mm</p>
+                    {numericMeasurements.length > 1 ? <div className="mt-3 h-40"><ResponsiveContainer width="100%" height="100%"><LineChart data={numericMeasurements.map((value, index) => ({ index: index + 1, value }))}><CartesianGrid stroke="rgba(148,163,184,0.15)" vertical={false} /><XAxis dataKey="index" tick={false} /><YAxis tick={false} /><Tooltip /><Line type="monotone" dataKey="value" stroke="#f7b84a" strokeWidth={2} /></LineChart></ResponsiveContainer></div> : <p className="mt-4 text-sm text-forensic-text/70">{numericMeasurements.length === 1 ? 'One valid length measurement is available; showing it as a single measurement.' : 'No length measurements available.'}</p>}
+                    <p className="mt-2 text-sm text-forensic-text/70">Mean {formatMeasurement(lengthStats.mean)} mm · Range {formatMeasurement(lengthStats.min)}–{formatMeasurement(lengthStats.max)} mm · Variation {formatMeasurement(lengthStats.stdDev)} mm</p>
                   </div>
                   <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-4">
                     <p className="text-sm font-medium text-forensic-text">Width</p>
-                    <div className="mt-3 h-40">
-                      <ResponsiveContainer width="100%" height="100%"><LineChart data={widthValues.length > 0 ? widthValues.map((value, index) => ({ index: index + 1, value })) : [{ index: 0, value: 0 }]}><CartesianGrid stroke="rgba(148,163,184,0.15)" vertical={false} /><XAxis dataKey="index" tick={false} /><YAxis tick={false} /><Tooltip /><Line type="monotone" dataKey="value" stroke="#4fd1ff" strokeWidth={2} /></LineChart></ResponsiveContainer>
-                    </div>
-                    <p className="mt-2 text-sm text-forensic-text/70">Mean {formatMeasurement(widthStats.mean)} mm · Range {formatMeasurement(widthStats.min)}–{formatMeasurement(widthStats.max)} mm · Std Dev {formatMeasurement(widthStats.stdDev)} mm</p>
+                    {widthValues.length > 1 ? <div className="mt-3 h-40"><ResponsiveContainer width="100%" height="100%"><LineChart data={widthValues.map((value, index) => ({ index: index + 1, value }))}><CartesianGrid stroke="rgba(148,163,184,0.15)" vertical={false} /><XAxis dataKey="index" tick={false} /><YAxis tick={false} /><Tooltip /><Line type="monotone" dataKey="value" stroke="#4fd1ff" strokeWidth={2} /></LineChart></ResponsiveContainer></div> : <p className="mt-4 text-sm text-forensic-text/70">{widthValues.length === 1 ? 'One valid width measurement is available; showing it as a single measurement.' : 'No width measurements available.'}</p>}
+                    <p className="mt-2 text-sm text-forensic-text/70">Mean {formatMeasurement(widthStats.mean)} mm · Range {formatMeasurement(widthStats.min)}–{formatMeasurement(widthStats.max)} mm · Variation {formatMeasurement(widthStats.stdDev)} mm</p>
                   </div>
                   <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-4">
                     <p className="text-sm font-medium text-forensic-text">Orientation</p>
-                    <div className="mt-3 h-40">
-                      <ResponsiveContainer width="100%" height="100%"><LineChart data={orientationValues.length > 0 ? orientationValues.map((value, index) => ({ index: index + 1, value })) : [{ index: 0, value: 0 }]}><CartesianGrid stroke="rgba(148,163,184,0.15)" vertical={false} /><XAxis dataKey="index" tick={false} /><YAxis tick={false} /><Tooltip /><Line type="monotone" dataKey="value" stroke="#f7b84a" strokeWidth={2} /></LineChart></ResponsiveContainer>
-                    </div>
-                    <p className="mt-2 text-sm text-forensic-text/70">Mean {formatMeasurement(orientationStats.mean)}° · Range {formatMeasurement(orientationStats.min)}–{formatMeasurement(orientationStats.max)}° · Std Dev {formatMeasurement(orientationStats.stdDev)}°</p>
+                    {orientationValues.length > 1 ? <div className="mt-3 h-40"><ResponsiveContainer width="100%" height="100%"><LineChart data={orientationValues.map((value, index) => ({ index: index + 1, value }))}><CartesianGrid stroke="rgba(148,163,184,0.15)" vertical={false} /><XAxis dataKey="index" tick={false} /><YAxis tick={false} /><Tooltip /><Line type="monotone" dataKey="value" stroke="#f7b84a" strokeWidth={2} /></LineChart></ResponsiveContainer></div> : <p className="mt-4 text-sm text-forensic-text/70">{orientationValues.length === 1 ? 'One valid orientation measurement is available.' : 'No orientation measurements available.'}</p>}
+                    <p className="mt-2 text-sm text-forensic-text/70">Mean {formatMeasurement(orientationStats.mean)}° · Range {formatMeasurement(orientationStats.min)}–{formatMeasurement(orientationStats.max)}° · Variation {formatMeasurement(orientationStats.stdDev)}°</p>
                   </div>
                 </div>
               </div>

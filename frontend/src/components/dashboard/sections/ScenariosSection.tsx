@@ -1,242 +1,45 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { AlertTriangle, Brain, CheckCircle2, CircleHelp, Eye, FileText, Play, Plus, Route, X } from 'lucide-react'
 import { useInvestigationStore } from '../../../store/investigationStore'
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
-import { Eye, Play, BookOpen, Sparkles } from 'lucide-react'
 import SectionShell from './SectionShell'
 
-function formatScenarioStatus(raw?: string) {
-  if (!raw) return 'Not analyzed'
-  const s = raw.toLowerCase()
-  if (s.includes('possible')) return 'Possible'
-  if (s.includes('partial')) return 'Possible (partial)'
-  if (s.includes('cannot determine') || s.includes('cannot determine')) return 'Cannot determine'
-  if (s.includes('not possible') || s.includes('conflict')) return 'Not possible based on current evidence'
-  return raw
+const countFor = (scenario: any) => scenario.analysisCounts || { supporting: 0, conflicting: 0, unresolved: 0 }
+const statusMeta = (status?: string) => {
+  const normalized = (status || '').toLowerCase()
+  if (normalized.includes('conflict') || normalized.includes('not possible')) return { label: 'CONFLICTING', Icon: AlertTriangle, tone: 'text-rose-400 border-rose-400/40 bg-rose-400/10' }
+  if (normalized.includes('partial')) return { label: 'PARTIALLY SUPPORTED', Icon: CircleHelp, tone: 'text-amber-300 border-amber-300/40 bg-amber-300/10' }
+  if (normalized.includes('support') || normalized.includes('possible')) return { label: 'SUPPORTED', Icon: CheckCircle2, tone: 'text-emerald-300 border-emerald-300/40 bg-emerald-300/10' }
+  return { label: 'INSUFFICIENT EVIDENCE', Icon: CircleHelp, tone: 'text-slate-300 border-forensic-border bg-forensic-surface/50' }
 }
 
-function shortInterpretation(raw?: string) {
-  if (!raw) return 'This scenario has not been analyzed yet.'
-  const s = raw.toLowerCase()
-  if (s.includes('possible')) return 'The available evidence is consistent with this proposed movement path.'
-  if (s.includes('partial')) return 'Some evidence supports this path, but other items are unresolved or conflicting.'
-  if (s.includes('cannot determine')) return 'There is not enough direction, timing, or path information to decide whether this scenario is possible.'
-  if (s.includes('not possible') || s.includes('conflict')) return 'The proposed movement direction conflicts with the available evidence.'
-  return raw
-}
-
-function statusLabel(raw?: string) {
-  if (!raw) return 'Not analyzed'
-  const s = raw.toLowerCase()
-  if (s.includes('possible') && !s.includes('partial')) return 'Possible'
-  if (s.includes('partial')) return 'Possible (partial)'
-  if (s.includes('cannot determine')) return 'Cannot determine'
-  if (s.includes('not possible') || s.includes('conflict')) return 'Not possible'
-  return raw
-}
-
-function totalEvidenceCount(scenario: any) {
-  const counts = scenario?.analysisCounts || {}
-  return (counts.supporting || 0) + (counts.conflicting || 0) + (counts.unresolved || 0)
+function ScenarioModal({ onClose }: { onClose: () => void }) {
+  const evidence = useInvestigationStore((state) => state.evidence)
+  const addScenario = useInvestigationStore((state) => state.addScenario)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [movementType, setMovementType] = useState('Multi-point path')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [error, setError] = useState('')
+  const toggleEvidence = (id: string) => setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
+  const submit = async () => {
+    if (!name.trim()) return setError('Give this hypothetical path a name.')
+    if (selectedIds.length < 2) return setError('Select at least two evidence items for the path.')
+    const selected = selectedIds.map((id) => evidence.find((item) => item.id === id)).filter(Boolean)
+    await addScenario({ name: name.trim(), description: description.trim() || `Assume movement followed ${selected.map((item) => item!.label).join(' toward ')}.`, movementType, pathPoints: selected.map((item) => item!.position) })
+    onClose()
+  }
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4"><div className="w-full max-w-xl rounded border border-forensic-border bg-forensic-panel p-5 shadow-2xl"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-forensic-amber">Create hypothetical scenario</p><h2 className="mt-1 text-xl font-semibold">Build an assumed movement path</h2></div><button type="button" onClick={onClose} aria-label="Close"><X className="h-5 w-5" /></button></div><div className="mt-5 space-y-4"><label className="block text-sm">Scenario name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Door -> Table -> Exit" className="mt-1 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm" /></label><label className="block text-sm">Description<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Assume movement started near the entrance, passed the table and continued toward the exit." className="mt-1 min-h-20 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm" /></label><label className="block text-sm">Movement type<select value={movementType} onChange={(event) => setMovementType(event.target.value)} className="mt-1 w-full border border-forensic-border bg-forensic-surface/60 px-3 py-2 text-sm"><option>Straight path</option><option>Multi-point path</option><option>Directional movement</option><option>Custom</option></select></label><div><p className="text-sm">Path / evidence sequence</p><div className="mt-2 flex flex-wrap gap-2">{selectedIds.map((id, index) => <span key={id} className="border border-forensic-amber/50 bg-forensic-amber/10 px-2 py-1 text-xs text-forensic-amber">{evidence.find((item) => item.id === id)?.label}{index < selectedIds.length - 1 ? ' ->' : ''}</span>)}</div><div className="mt-3 grid gap-2 sm:grid-cols-2">{evidence.map((item) => <button type="button" key={item.id} onClick={() => toggleEvidence(item.id)} className={`flex items-center gap-2 border px-3 py-2 text-left text-xs ${selectedIds.includes(item.id) ? 'border-forensic-amber bg-forensic-amber/10' : 'border-forensic-border bg-forensic-surface/40'}`}><Route className="h-3.5 w-3.5" />{item.label} - {item.type}</button>)}</div></div>{error && <p className="text-sm text-rose-300">{error}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={onClose} className="border border-forensic-border px-3 py-2 text-xs">Cancel</button><button type="button" onClick={() => void submit()} className="flex items-center gap-2 bg-forensic-amber px-3 py-2 text-xs font-semibold text-forensic-bg"><Plus className="h-3.5 w-3.5" />Create Scenario</button></div></div></div></div>
 }
 
 export default function ScenariosSection() {
-  const scenarios = useInvestigationStore((s) => s.scenarios)
-  const activeScenarioId = useInvestigationStore((s) => s.activeScenarioId)
-  const setActiveScenario = useInvestigationStore((s) => s.setActiveScenario)
-  const addScenario = useInvestigationStore((s) => s.addScenario)
-  const explainScenario = useInvestigationStore((s) => s.explainScenario)
-  const generateInsights = useInvestigationStore((s) => s.generateScenarioInsights)
-  const evaluateScenario = useInvestigationStore((s) => s.evaluateScenario)
-  const evaluateAll = useInvestigationStore((s) => s.evaluateAllScenarios)
-  const evidenceList = useInvestigationStore((s) => s.evidence)
-
-  const formatEvidenceLabel = (evidenceId: string) => {
-    if (!evidenceId) return evidenceId || 'Unknown'
-    const found = evidenceList.find((e) => e.id === evidenceId || e.label === evidenceId)
-    if (found) return found.label
-    // shorten long DB ids for display
-    if (evidenceId.length > 12) return `${evidenceId.slice(0, 8)}...`
-    return evidenceId
-  }
-
-  // ensure scenario list is unique and stable
-  const uniqueScenarios = useMemo(() => {
-    const map = new Map<string, any>()
-    scenarios.forEach((s) => { if (s && s.id) map.set(s.id, s) })
-    return Array.from(map.values())
-  }, [scenarios])
-
-  const chartData = useMemo(
-    () => uniqueScenarios
-      .filter((sc) => sc.analysisStatus && !String(sc.analysisStatus).toLowerCase().includes('not analyzed'))
-      .map((sc) => ({
-        name: sc.name,
-        supporting: sc.analysisCounts?.supporting || 0,
-        conflicting: sc.analysisCounts?.conflicting || 0,
-        unresolved: sc.analysisCounts?.unresolved || 0,
-      })),
-    [uniqueScenarios],
-  )
-
-  const activeScenario = uniqueScenarios.find((sc) => sc.id === activeScenarioId) || null
-
-  return (
-    <SectionShell title="SCENARIOS" subtitle="Compare hypothetical reconstructions" action={
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => addScenario({ name: 'Scenario D', description: 'New possible movement path', movementType: 'User created', pathPoints: [] })}
-          className="cursor-pointer border border-forensic-amber/50 bg-forensic-amber/10 px-3 py-2 text-xs font-semibold text-forensic-amber uppercase"
-        >
-          + Create Scenario
-        </button>
-        <button
-          type="button"
-          onClick={() => evaluateAll()}
-          className="cursor-pointer border border-forensic-border px-3 py-2 text-xs font-semibold"
-        >
-          Evaluate All
-        </button>
-      </div>
-    }>
-      <div className="space-y-4">
-        <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-4 text-sm leading-7 text-forensic-text/70">
-          This section compares each scenario against the available evidence using deterministic, rule-based reconstruction analysis. It does not use generative reasoning for core assessment.
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-4">
-            {uniqueScenarios.map((scenario) => (
-              <div key={scenario.id} onClick={() => setActiveScenario(scenario.id)} className={`w-full rounded-2xl border p-4 text-left cursor-pointer ${activeScenarioId === scenario.id ? 'border-forensic-amber bg-forensic-amber/10' : 'border-forensic-border bg-forensic-panel/70'}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-forensic-amber">{scenario.name}</p>
-                    <p className="mt-2 text-lg font-semibold text-forensic-text">{scenario.description}</p>
-                    <p className="mt-1 text-sm leading-6 text-forensic-text/70">Movement type: {scenario.movementType}</p>
-                    <div className="mt-2">
-                      <span className="inline-block rounded-full px-2 py-1 text-xs font-semibold bg-forensic-surface/60 border-forensic-border text-forensic-muted">{statusLabel(scenario.analysisStatus)}</span>
-                    </div>
-                  </div>
-                  <div className="rounded-full border border-forensic-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-forensic-muted">{scenario.analysisStatus || 'Not analyzed'}</div>
-                </div>
-
-                  <div className="mt-3 flex items-center gap-2">
-                  <button onClick={(e) => { e.stopPropagation(); setActiveScenario(scenario.id) }} className="flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold border"><Eye className="h-3.5 w-3.5" />Inspect</button>
-                  <button onClick={async (e) => { e.stopPropagation(); try { await evaluateScenario(scenario.id) } catch (err: any) { console.error(err); alert(err?.message || String(err) || 'Evaluate failed') } }} className="flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold border"><Play className="h-3.5 w-3.5" />Evaluate</button>
-                  {/* show Explain only after any analysis has been run */}
-                  {scenario.analysisStatus && !scenario.analysisStatus.toLowerCase().includes('not analyzed') ? (
-                    <>
-                      <button onClick={async (e) => { e.stopPropagation(); try { await explainScenario(scenario.id) } catch (err: any) { console.error(err); alert(err?.message || String(err) || 'Explain failed') } }} className="flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold border"><BookOpen className="h-3.5 w-3.5" />Explain</button>
-                      {/* Generate insights only for analyzed scenarios that are not 'Undetermined' */}
-                      {scenario.analysisStatus && !scenario.analysisStatus.toLowerCase().includes('insufficient') && !scenario.analysisStatus.toLowerCase().includes('cannot determine') ? (
-                        <button onClick={async (e) => { e.stopPropagation(); try { await generateInsights(scenario.id); alert('Insights generated') } catch (err: any) { console.error(err); alert(err?.message || String(err) || 'Insights failed') } }} className="flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold bg-forensic-amber text-white"><Sparkles className="h-3.5 w-3.5" />Generate Insights</button>
-                      ) : null}
-                      <button onClick={async (e) => { e.stopPropagation(); try { await (useInvestigationStore.getState().resetScenario)(scenario.id); alert('Analysis reset') } catch (err: any) { console.error(err); alert(err?.message || String(err) || 'Reset failed') } }} className="flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold border bg-white/5">Reset</button>
-                    </>
-                  ) : null}
-                </div>
-
-                {scenario.explanation ? <div className="mt-3 text-sm text-forensic-text/70">{scenario.explanation}</div> : null}
-              </div>
-            ))}
-
-            {activeScenario ? (
-              <div className="rounded-2xl border border-forensic-border bg-forensic-surface/40 p-4">
-                <h3 className="text-lg font-semibold">{activeScenario.name}</h3>
-                <p className="text-sm text-forensic-text/70 mt-2">{activeScenario.description}</p>
-
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-forensic-muted">Status</p>
-                    <div className="mt-2 text-3xl font-bold">{formatScenarioStatus(activeScenario.analysisStatus)}</div>
-                    <p className="mt-2 text-sm text-forensic-text/70">{shortInterpretation(activeScenario.analysisStatus)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-forensic-muted">Evidence checked</p>
-                    <div className="mt-2 space-y-2 text-sm">
-                      <div className="flex items-center justify-between"><div>Checked</div><div className="font-semibold">{totalEvidenceCount(activeScenario)} items</div></div>
-                      <div className="flex items-center justify-between"><div>Supports this scenario</div><div className="font-semibold">{activeScenario.analysisCounts?.supporting ?? 0} items</div></div>
-                      <div className="flex items-center justify-between"><div>Conflicts with this scenario</div><div className="font-semibold">{activeScenario.analysisCounts?.conflicting ?? 0} items</div></div>
-                      <div className="flex items-center justify-between"><div>Not enough information</div><div className="font-semibold">{activeScenario.analysisCounts?.unresolved ?? 0} items</div></div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-2xl border border-forensic-border/70 bg-forensic-panel/70 p-3 text-sm text-forensic-text/70">
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-forensic-muted">Conflicts</p>
-                    {activeScenario.analysisConflicts?.length ? (
-                      <ul className="mt-3 space-y-2">
-                        {activeScenario.analysisConflicts.slice(0, 3).map((conflict: any, index: number) => (
-                          <li key={`${conflict.evidenceId}-${index}`} className="rounded-xl bg-forensic-surface/80 p-3">
-                            <div className="font-semibold">{conflict.type}</div>
-                            <div className="text-xs text-forensic-text/70">{formatEvidenceLabel(conflict.evidenceId)}: {conflict.difference}</div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-3 text-sm text-forensic-text/70">No direct conflicts detected.</p>
-                    )}
-                  </div>
-                  <div className="rounded-2xl border border-forensic-border/70 bg-forensic-panel/70 p-3 text-sm text-forensic-text/70">
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-forensic-muted">Missing information</p>
-                    <div className="mt-3 space-y-2">
-                      {activeScenario.analysisGaps?.length ? activeScenario.analysisGaps.slice(0, 3).map((gap: string, index: number) => (
-                        <div key={`gap-${index}`} className="rounded-xl bg-forensic-surface/80 p-3">{gap}</div>
-                      )) : <p className="text-sm text-forensic-text/70">No gap observations recorded.</p>}
-                      {activeScenario.analysisRecommendations?.length ? (
-                        <div className="rounded-xl bg-forensic-surface/80 p-3">
-                          <div className="font-semibold">Recommendation</div>
-                          <div className="text-sm text-forensic-text/70">{activeScenario.analysisRecommendations[0]}</div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <p className="text-xs font-semibold uppercase text-forensic-muted">What does this mean?</p>
-                  <div className="mt-2 text-sm text-forensic-text/70">{activeScenario.insights?.plain_language_explanation || activeScenario.explanation || 'No explanation available.'}</div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="rounded-2xl border border-forensic-border bg-forensic-panel/70 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-forensic-muted">Scenario comparison</p>
-            {uniqueScenarios.length > 1 ? (
-              <div className="mt-4 h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" domain={[0, Math.max(...chartData.map((item) => Math.max(item.supporting, item.conflicting, item.unresolved)), 1)]} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                    <YAxis dataKey="name" type="category" width={120} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="supporting" stackId="a" fill="#4fd1ff" />
-                    <Bar dataKey="conflicting" stackId="a" fill="#f97316" />
-                    <Bar dataKey="unresolved" stackId="a" fill="#a3e635" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="mt-4">
-                <p className="text-sm text-forensic-text/70">Comparison chart is shown when multiple scenarios exist. Add or generate more scenarios to enable comparison.</p>
-              </div>
-            )}
-
-            <div className="mt-3 rounded-2xl border border-forensic-border/70 bg-forensic-surface/40 p-3 text-sm leading-6 text-forensic-text/70">
-              {uniqueScenarios.length > 0 ? (
-                <div>
-                  <div className="font-semibold">{uniqueScenarios.length} scenarios compared</div>
-                  <div className="text-forensic-text/70 mt-1">Compare supporting, conflicting, and unresolved evidence counts across scenarios.</div>
-                </div>
-              ) : (
-                'Select a case to view scenario comparison.'
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </SectionShell>
-  )
+  const scenarios = useInvestigationStore((state) => state.scenarios)
+  const evidence = useInvestigationStore((state) => state.evidence)
+  const activeScenarioId = useInvestigationStore((state) => state.activeScenarioId)
+  const setActiveScenario = useInvestigationStore((state) => state.setActiveScenario)
+  const evaluateScenario = useInvestigationStore((state) => state.evaluateScenario)
+  const generateInsights = useInvestigationStore((state) => state.generateScenarioInsights)
+  const [showModal, setShowModal] = useState(false)
+  const activeScenario = scenarios.find((scenario) => scenario.id === activeScenarioId)
+  const uniqueScenarios = useMemo(() => Array.from(new Map(scenarios.filter((scenario) => scenario?.id).map((scenario) => [scenario.id, scenario])).values()), [scenarios])
+  return <SectionShell title="SCENARIOS" subtitle="Compare assumed reconstruction paths" action={<button type="button" onClick={() => setShowModal(true)} className="flex items-center gap-2 border border-forensic-amber/50 bg-forensic-amber/10 px-3 py-2 text-xs font-semibold uppercase text-forensic-amber"><Plus className="h-3.5 w-3.5" />Create Scenario</button>}>{showModal && <ScenarioModal onClose={() => setShowModal(false)} />}<div className="space-y-4"><div className="border border-forensic-border bg-forensic-surface/40 p-4 text-sm leading-6 text-forensic-text/70">A hypothetical scenario is an assumed movement path created for investigation and education. It is compared with recorded measurements, not treated as a prediction, proof, or conclusion about what actually happened.</div>{!uniqueScenarios.length ? <div className="border border-dashed border-forensic-border bg-forensic-panel/60 p-8 text-center"><Route className="mx-auto h-8 w-8 text-forensic-amber" /><h3 className="mt-3 text-lg font-semibold">No hypothetical scenarios yet</h3><p className="mx-auto mt-2 max-w-md text-sm text-forensic-text/70">Create a hypothetical movement path to test how well it agrees with the available evidence.</p><button type="button" onClick={() => setShowModal(true)} className="mt-5 inline-flex items-center gap-2 border border-forensic-amber bg-forensic-amber/10 px-4 py-2 text-xs font-semibold text-forensic-amber"><Plus className="h-3.5 w-3.5" />Create a hypothetical path</button></div> : <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]"><div className="space-y-3">{uniqueScenarios.map((scenario) => { const counts = countFor(scenario); const meta = statusMeta(scenario.analysisStatus); const Icon = meta.Icon; const pathLabels = (scenario.pathPoints || []).map((point: any) => evidence.find((item) => item.position.x === point.x && item.position.z === point.z)?.label).filter(Boolean); return <article key={scenario.id} onClick={() => setActiveScenario(scenario.id)} className={`border p-4 ${activeScenarioId === scenario.id ? 'border-forensic-amber bg-forensic-amber/10' : 'border-forensic-border bg-forensic-panel/70'}`}><div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">{scenario.name}</h3><p className="mt-1 text-xs uppercase tracking-[0.18em] text-forensic-muted">Hypothetical movement path</p><p className="mt-2 text-sm text-forensic-text/70">{pathLabels.join(' -> ') || scenario.description}</p></div><span className={`inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-semibold ${meta.tone}`}><Icon className="h-3.5 w-3.5" />{meta.label}</span></div><p className="mt-3 text-sm text-forensic-text/70">{scenario.explanation || `The path has not been evaluated against the ${evidence.length} available evidence items.`}</p><div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs"><div><strong className="block text-lg text-emerald-300">{counts.supporting}</strong>Consistent</div><div><strong className="block text-lg text-rose-300">{counts.conflicting}</strong>Conflicting</div><div><strong className="block text-lg text-amber-300">{counts.unresolved}</strong>Needs more evidence</div></div><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={(event) => { event.stopPropagation(); setActiveScenario(scenario.id) }} className="flex items-center gap-1 border px-3 py-1.5 text-xs"><Eye className="h-3.5 w-3.5" />Inspect</button><button type="button" onClick={(event) => { event.stopPropagation(); void evaluateScenario(scenario.id) }} className="flex items-center gap-1 border px-3 py-1.5 text-xs"><Play className="h-3.5 w-3.5" />Evaluate</button><button type="button" onClick={(event) => { event.stopPropagation(); void generateInsights(scenario.id) }} className="flex items-center gap-1 border border-forensic-amber/50 px-3 py-1.5 text-xs text-forensic-amber"><Brain className="h-3.5 w-3.5" />Generate Insights</button></div></article> })}</div><div className="border border-forensic-border bg-forensic-panel/70 p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-forensic-muted">Evidence comparison</p>{activeScenario ? <><h3 className="mt-3 text-lg font-semibold">{activeScenario.name}</h3><div className="mt-4 space-y-3">{(['supporting', 'conflicting', 'unresolved'] as const).map((key) => { const count = countFor(activeScenario)[key]; const label = key === 'supporting' ? 'Consistent evidence' : key === 'conflicting' ? 'Conflicting evidence' : 'Unresolved evidence'; return <div key={key}><div className="flex justify-between text-xs"><span>{label}</span><strong>{count}</strong></div><div className="mt-1 h-3 bg-forensic-surface"><div className={`h-full ${key === 'supporting' ? 'bg-emerald-400' : key === 'conflicting' ? 'bg-rose-400' : 'bg-amber-300'}`} style={{ width: `${Math.min(100, count * 20)}%` }} /></div></div> })}</div><p className="mt-5 text-xs leading-5 text-forensic-text/60">Each bar shows how many available evidence items support, conflict with, or cannot yet evaluate the selected hypothetical path.</p>{activeScenario.insights && <div className="mt-5 border-t border-forensic-border pt-4"><p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-forensic-amber"><FileText className="h-3.5 w-3.5" />Scenario insight</p><p className="mt-3 text-sm font-semibold">{activeScenario.insights.plain_language_explanation}</p></div>}</> : <p className="mt-4 text-sm text-forensic-text/70">Select a scenario to compare it with the evidence.</p>}</div></div>}</div></SectionShell>
 }

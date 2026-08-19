@@ -99,6 +99,7 @@ type InvestigationState = {
   analysisResults: Array<{ id: string; name: string; result: string }>
   reconstructionGenerated: boolean
   summaryGenerated: boolean
+  summaryText: string
   analysisState: AnalysisState
   loading: boolean
   creatingCase: boolean
@@ -120,6 +121,7 @@ type InvestigationState = {
   generateSummary: () => Promise<void>
 }
 
+<<<<<<< HEAD
 const parseMeasurementValue = (value?: string) => {
   if (!value) return null
   const match = value.match(/-?\d+(?:\.\d+)?/)
@@ -152,6 +154,8 @@ const createEmptyCaseState = () => ({
 // track autogen requests per-case in this session to avoid duplicate triggers
 const autogenTriggered = new Set<string>()
 
+=======
+>>>>>>> 8f943c6 (Improve scenarios, math engine and 2D scene)
 export const useInvestigationStore = create<InvestigationState>()(
   persist(
     (set, get) => ({
@@ -169,6 +173,7 @@ export const useInvestigationStore = create<InvestigationState>()(
       analysisResults: [],
       reconstructionGenerated: false,
       summaryGenerated: false,
+      summaryText: '',
       analysisState: {
         isRunning: false,
         status: 'idle',
@@ -219,7 +224,11 @@ export const useInvestigationStore = create<InvestigationState>()(
           const created = await api.createCase(body)
           const nextCases = [...get().cases, created]
           set({ cases: nextCases, selectedCaseId: created.id, activeCase: created.title, evidence: created.evidence ?? [], scenarios: created.scenarios ?? [], calculations: created.calculations ?? [] })
+<<<<<<< HEAD
           // ensure UI selects the newly created case so downstream logic (like autogen) can run
+=======
+          // Select the newly created case without creating or evaluating scenarios.
+>>>>>>> 8f943c6 (Improve scenarios, math engine and 2D scene)
           try {
             await get().selectCase(created.id)
           } catch (err) {
@@ -259,6 +268,7 @@ export const useInvestigationStore = create<InvestigationState>()(
             summaryGenerated: data.summaryGenerated ?? false,
             analysisResults: (data.calculations || []).map((c: any) => ({ id: c.id, name: c.title, result: c.result })),
           })
+<<<<<<< HEAD
           // If the case currently has no scenarios but does have evidence, trigger the autogen endpoint once
           try {
             const hasScenarios = uniqueScenarios.length > 0
@@ -299,6 +309,8 @@ export const useInvestigationStore = create<InvestigationState>()(
               console.error('Auto-evaluate scenarios failed', err)
             }
           }
+=======
+>>>>>>> 8f943c6 (Improve scenarios, math engine and 2D scene)
         } catch (err) {
           console.error('Select case failed', err)
         }
@@ -328,7 +340,7 @@ export const useInvestigationStore = create<InvestigationState>()(
         const caseId = get().selectedCaseId
         if (!caseId) throw new Error('No selected case')
         try {
-          const created = await api.createEvidence(caseId, item)
+          await api.createEvidence(caseId, item)
           // refresh case
           await get().selectCase(caseId)
         } catch (err) {
@@ -365,8 +377,13 @@ export const useInvestigationStore = create<InvestigationState>()(
         const caseId = get().selectedCaseId
         if (!caseId) throw new Error('No selected case')
         try {
-          await api.createScenario(caseId, item)
-          await get().selectCase(caseId)
+          const created = await api.createScenario(caseId, item)
+          set((current) => {
+            const next = current.scenarios.some((scenario) => scenario.id === created.id)
+              ? current.scenarios.map((scenario) => scenario.id === created.id ? created : scenario)
+              : [...current.scenarios, created]
+            return { scenarios: next, activeScenarioId: created.id }
+          })
         } catch (err) {
           console.error('Add scenario failed', err)
           throw err

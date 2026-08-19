@@ -461,17 +461,16 @@ def analyze_scenario(scenario: Dict[str, Any], evidence_list: List[Dict[str, Any
     # - Cannot determine: no supporting/conflicting but unresolved items exist
     # - Partially supported -> treat as Possible (partial)
     # - Analysis pending/fallback -> Cannot determine
-    if conflicting == 0 and supporting > 0:
-        overall_status = 'Possible'
+    if conflicting == 0 and supporting > 0 and unresolved == 0:
+        overall_status = 'SUPPORTED'
     elif conflicting > supporting:
-        overall_status = 'Not possible based on current evidence'
+        overall_status = 'CONFLICTING'
     elif conflicting > 0 and supporting > 0:
-        # mixed signals: treat as possible but partial
-        overall_status = 'Possible (partial)'
+        overall_status = 'PARTIALLY SUPPORTED'
     elif supporting == 0 and unresolved > 0:
-        overall_status = 'Cannot determine'
+        overall_status = 'INSUFFICIENT EVIDENCE'
     else:
-        overall_status = 'Cannot determine'
+        overall_status = 'INSUFFICIENT EVIDENCE'
 
     return {
         'analysisStatus': overall_status,

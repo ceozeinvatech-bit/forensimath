@@ -125,87 +125,14 @@ def get_scenario(case_id: str, scenario_id: str):
 @router.patch('/cases/{case_id}/scenarios/{scenario_id}', tags=['scenarios'])
 def update_scenario(case_id: str, scenario_id: str, payload: dict):
     db = get_db()
-    analysis_result = analyze_scenario(scenario, evidence)
-
-    # Build deterministic, human-friendly explanation
-    status = analysis_result.get('analysisStatus', 'Analysis pending')
-    counts = analysis_result.get('analysisCounts', {})
-    conflicts = analysis_result.get('analysisConflicts', [])
-    gaps = analysis_result.get('analysisGaps', [])
-    recommendations = analysis_result.get('analysisRecommendations', [])
-
-    parts = []
-    parts.append(f"Scenario: {scenario.get('name')} — {scenario.get('description', '')}")
-    parts.append(f"Status: {status}.")
-    parts.append(f"Evidence checked: {counts.get('supporting', 0) + counts.get('conflicting', 0) + counts.get('unresolved', 0)} items.")
-    parts.append(f"Supports this scenario: {counts.get('supporting', 0)} items. Conflicts: {counts.get('conflicting', 0)} items. Cannot evaluate: {counts.get('unresolved', 0)} items.")
-
-    if counts.get('supporting', 0) > 0:
-        parts.append('What agrees: Some evidence measurements (position, distance, or direction) are geometrically compatible with the proposed path.')
-    else:
-        parts.append('What agrees: None of the available evidence directly supports the path based on the current measurements.')
-
-    if conflicts:
-        first = conflicts[0]
-        eid = first.get('evidenceId')
-        parts.append(f"What conflicts: {first.get('type')} detected for evidence {eid} ({first.get('difference')}).")
-    else:
-        parts.append('What conflicts: No direct conflicts were detected from the available measurements.')
-
-    if gaps:
-        parts.append('What is missing: ' + ' '.join(gaps))
-    else:
-        parts.append('What is missing: No missing fields were detected for evaluated evidence.')
-
-    # Meaning and next steps
-    if status == 'Supported':
-        parts.append('Meaning: The available evidence is consistent with this proposed movement path. This is not proof; it only indicates geometric agreement with entered measurements.')
-    elif status == 'Conflicting':
-        parts.append('Meaning: One or more measurements disagree with this path; review the conflicting evidence and measurement sources.')
-    elif status == 'Cannot determine yet':
-        parts.append('Meaning: There is not enough information to confirm or reject the proposed movement path.')
-    else:
-        parts.append('Meaning: The analysis produced a mixed result; inspect the detailed evidence analysis for specifics.')
-
-    if recommendations:
-        parts.append('Recommended next steps: ' + ' '.join(recommendations))
-
-    explanation = '\n'.join(parts)
-
-    db.scenarios.update_one(
-        {'_id': ObjectId(scenario_id)},
-        {'$set': {
-            'explanation': explanation,
-            'analysisStatus': analysis_result['analysisStatus'],
-            'analysisCounts': analysis_result['analysisCounts'],
-            'evidenceAnalysis': analysis_result['evidenceAnalysis'],
-            'analysisTimeline': analysis_result['analysisTimeline'],
-            'analysisConflicts': analysis_result['analysisConflicts'],
-            'analysisGaps': analysis_result['analysisGaps'],
-            'analysisRecommendations': analysis_result['analysisRecommendations'],
-            'analysisLastUpdated': analysis_result['analysisLastUpdated'],
-        }}
-    )
-    evidence = list(db.evidence.find({'caseId': case_id}))
-    for e in evidence:
-        e['id'] = str(e.get('_id'))
-        e.pop('_id', None)
-
-    # compute deterministic evidence-based analysis and persist results
-    from ..services.evidence_analysis import analyze_scenario
-    analysis_result = analyze_scenario(scenario, evidence)
-    update = {
-        'analysisStatus': analysis_result['analysisStatus'],
-        'analysisCounts': analysis_result['analysisCounts'],
-        'evidenceAnalysis': analysis_result['evidenceAnalysis'],
-        'analysisTimeline': analysis_result['analysisTimeline'],
-        'analysisConflicts': analysis_result['analysisConflicts'],
-        'analysisGaps': analysis_result['analysisGaps'],
-        'analysisRecommendations': analysis_result['analysisRecommendations'],
-        'analysisLastUpdated': analysis_result['analysisLastUpdated'],
-    }
-    db.scenarios.update_one({'_id': ObjectId(scenario_id)}, {'$set': update})
-    updated = db.scenarios.find_one({'_id': ObjectId(scenario_id)})
+    scenario = db.scenarios.find_one({'_id': ObjectId(scenario_id), 'caseId': case_id})
+    if not scenario:
+        raise HTTPException(status_code=404, detail='Scenario not found')
+    allowed = {'name', 'description', 'movementType', 'pathPoints'}
+    changes = {key: value for key, value in payload.items() if key in allowed}
+    if changes:
+        db.scenarios.update_one({'_id': ObjectId(scenario_id), 'caseId': case_id}, {'$set': changes})
+    updated = db.scenarios.find_one({'_id': ObjectId(scenario_id), 'caseId': case_id})
     return serialize_scenario(updated)
 
 

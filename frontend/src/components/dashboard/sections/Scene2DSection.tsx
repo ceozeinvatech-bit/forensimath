@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef } from 'react'
-import { Sparkles } from 'lucide-react'
+import { Maximize2, Minus, Plus, RotateCcw, Sparkles } from 'lucide-react'
 import { useInvestigationStore } from '../../../store/investigationStore'
 import EvidenceInspector from './EvidenceInspector'
 import SectionShell from './SectionShell'
@@ -30,13 +30,40 @@ export default function Scene2DSection() {
   const selectedCase = useInvestigationStore((state) => state.cases.find((c) => c.id === state.selectedCaseId))
   const sceneBounds = { width: selectedCase?.dimensions?.width ?? defaultSceneBounds.width, depth: selectedCase?.dimensions?.depth ?? defaultSceneBounds.depth }
 
+  const sceneFrame = useMemo(() => {
+    const points = evidence.map((item) => item.position).concat(activeScenario?.pathPoints || [])
+    if (!points.length) return { minX: 0, maxX: sceneBounds.width, minZ: 0, maxZ: sceneBounds.depth }
+    const xs = points.map((point) => point.x)
+    const zs = points.map((point) => point.z)
+    const xSpan = Math.max(Math.max(...xs) - Math.min(...xs), 1)
+    const zSpan = Math.max(Math.max(...zs) - Math.min(...zs), 1)
+    const xPadding = Math.max(xSpan * 0.14, 0.5)
+    const zPadding = Math.max(zSpan * 0.14, 0.5)
+    return { minX: Math.min(...xs) - xPadding, maxX: Math.max(...xs) + xPadding, minZ: Math.min(...zs) - zPadding, maxZ: Math.max(...zs) + zPadding }
+  }, [activeScenario?.pathPoints, evidence, sceneBounds.depth, sceneBounds.width])
+
+  const worldToScreen = (x: number, z: number) => {
+    const padding = 48
+    const width = 560
+    const height = 320
+    const scaleX = (width - padding * 2) / Math.max(sceneFrame.maxX - sceneFrame.minX, 1)
+    const scaleZ = (height - padding * 2) / Math.max(sceneFrame.maxZ - sceneFrame.minZ, 1)
+    const fitScale = Math.min(scaleX, scaleZ)
+    const fittedWidth = (sceneFrame.maxX - sceneFrame.minX) * fitScale
+    const fittedHeight = (sceneFrame.maxZ - sceneFrame.minZ) * fitScale
+    const offsetX = (width - fittedWidth) / 2
+    const offsetY = (height - fittedHeight) / 2
+    return { x: offsetX + (x - sceneFrame.minX) * fitScale, y: height - offsetY - (z - sceneFrame.minZ) * fitScale }
+  }
+
   const scenePoints = useMemo(() => {
-    return evidence.map((item) => {
-      const x = 80 + ((item.position.x / sceneBounds.width) * 420)
-      const z = 240 - ((item.position.z / sceneBounds.depth) * 180)
-      return { ...item, x, z }
+    return evidence.map((item, index) => {
+      const screen = worldToScreen(item.position.x, item.position.z)
+      const nearby = evidence.slice(0, index).filter((other) => Math.hypot(other.position.x - item.position.x, other.position.z - item.position.z) < 0.25).length
+      const angle = nearby * (Math.PI / 3)
+      return { ...item, x: screen.x + Math.cos(angle) * nearby * 14, z: screen.y + Math.sin(angle) * nearby * 14, actualX: screen.x, actualY: screen.y }
     })
-  }, [evidence, sceneBounds.width, sceneBounds.depth])
+  }, [evidence, sceneFrame])
 
   const toScreen = (x: number, y: number) => ({ x: pan.x + x * scale, y: pan.y + y * scale })
   const zoomBy = (factor: number) => setScale((s) => Math.min(6, Math.max(0.25, +(s * factor).toFixed(3))))
@@ -162,12 +189,13 @@ export default function Scene2DSection() {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.25em] text-forensic-amber uppercase">Simulated Scene — Top-down View</p>
-              <p className="mt-1 text-sm text-slate-400">Coordinate unit: metres • Scene bounds: {sceneBounds.width}m × {sceneBounds.depth}m</p>
+              <p className="mt-1 text-sm text-slate-400">Coordinate unit: metres | Scene bounds: {sceneBounds.width}m × {sceneBounds.depth}m</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => zoomBy(1.2)} className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-forensic-text backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:border-forensic-accent/60 hover:bg-forensic-surface/80">+</button>
-              <button type="button" onClick={() => zoomBy(0.83)} className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-forensic-text backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:border-forensic-accent/60 hover:bg-forensic-surface/80">−</button>
-              <button type="button" onClick={() => resetView()} className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-forensic-text backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:border-forensic-accent/60 hover:bg-forensic-surface/80">⟳</button>
+              <button type="button" aria-label="Zoom in" onClick={() => zoomBy(1.2)} className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-forensic-text"><Plus className="h-4 w-4" /></button>
+              <button type="button" aria-label="Zoom out" onClick={() => zoomBy(0.83)} className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-forensic-text"><Minus className="h-4 w-4" /></button>
+              <button type="button" aria-label="Fit scene" onClick={() => resetView()} className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-forensic-text"><Maximize2 className="h-4 w-4" /></button>
+              <button type="button" aria-label="Reset view" onClick={() => resetView()} className="cursor-pointer rounded-xl border border-forensic-border/80 bg-white/8 px-3 py-2 text-forensic-text"><RotateCcw className="h-4 w-4" /></button>
             </div>
           </div>
 
@@ -192,7 +220,7 @@ export default function Scene2DSection() {
                     fill="none"
                     stroke="#38bdf8"
                     strokeWidth="3"
-                    points={activeScenario.pathPoints.map((point) => `${80 + (point.x / sceneBounds.width) * 420},${240 - (point.z / sceneBounds.depth) * 180}`).join(' ')}
+                    points={activeScenario.pathPoints.map((point) => { const screen = worldToScreen(point.x, point.z); return `${screen.x},${screen.y}` }).join(' ')}
                   />
                 )}
 
@@ -201,7 +229,8 @@ export default function Scene2DSection() {
               )}
 
                 {scenePoints.map((point) => (
-                  <g key={point.id} onClick={() => setSceneState({ selectedEvidenceId: point.id })} onMouseEnter={(ev) => { const s = toScreen(point.x, point.z); setHoverInfo({ x: s.x, y: s.y, item: point }) }} onMouseLeave={() => setHoverInfo(null)}>
+                  <g key={point.id} onClick={() => setSceneState({ selectedEvidenceId: point.id })} onMouseEnter={() => { const s = toScreen(point.x, point.z); setHoverInfo({ x: s.x, y: s.y, item: point }) }} onMouseLeave={() => setHoverInfo(null)}>
+                    {point.actualX !== point.x || point.actualY !== point.z ? <line x1={point.actualX} y1={point.actualY} x2={point.x} y2={point.z} stroke="#f59e0b" strokeDasharray="3 3" strokeWidth="1" /> : null}
                     {drawMarker(point)}
                     {showLabels && (
                       <text x={point.x + 12} y={point.z - 14} fill="#f8fafc" fontSize="11" style={{ pointerEvents: 'none' }}>
@@ -221,7 +250,6 @@ export default function Scene2DSection() {
                   const midY = (from.z + to.z) / 2
                   const dx = to.x - from.x
                   const dy = to.z - from.z
-                  const dist = Math.hypot(dx * (sceneBounds.width / sceneBounds.width), dy * (sceneBounds.depth / sceneBounds.depth))
                   const labelOffset = 12
                   const len = Math.hypot(dx, dy) || 1
                   const ux = -dy / len
@@ -305,13 +333,20 @@ export default function Scene2DSection() {
                       : 'border-forensic-border text-forensic-text/85 hover:border-forensic-accent/60 hover:bg-forensic-surface/70 hover:text-forensic-text'
                   }`}
                 >
-                  {point.label} • {point.type}
+                  {point.label} | {point.type}
                 </button>
               ))}
             </div>
           </div>
 
           <EvidenceInspector selectedEvidenceId={selectedEvidenceId} />
+          <div className="rounded border border-forensic-border bg-forensic-panel/70 p-4">
+            <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.25em] text-forensic-muted uppercase">Scene Legend</p>
+            <div className="mt-3 grid gap-2 text-xs text-forensic-text/70 sm:grid-cols-2">
+              <span><span className="text-forensic-amber">○</span> Position</span><span><span className="text-forensic-amber">▭</span> Footprint / Object</span><span><span className="text-teal-300">◌</span> Simulated stain</span><span><span className="text-sky-300">↗</span> Trajectory with direction</span><span className="sm:col-span-2"><span className="text-forensic-amber">- -</span> Measurement / distance</span>
+            </div>
+            {selectedEvidenceId && <button type="button" onClick={() => setSceneState({ selectedEvidenceId: null })} className="mt-3 border border-forensic-border px-3 py-1.5 text-xs">Clear selection</button>}
+          </div>
         </div>
       </div>
     </SectionShell>
