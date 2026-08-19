@@ -49,37 +49,21 @@ def build_calculations(evidence: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 'category': 'measurement',
             })
 
-        orientation = parse_measurement_value(item.get('measurements', {}).get('orientation') or item.get('measurements', {}).get('direction'))
-        if orientation is not None:
-            calculations.append({
-                'id': f"{item.get('label')}-direction",
-                'evidenceId': item.get('id') or item.get('label'),
-                'title': f"{item.get('label')} orientation",
-                'formula': 'Angle is read directly from the recorded orientation value',
-                'inputs': f"{item.get('measurements', {}).get('orientation') or item.get('measurements', {}).get('direction')}",
-                'calculation': 'The directional value is preserved as an orientation measurement.',
-                'result': f"{orientation:.1f}°",
-                'assumptions': 'Angles are interpreted as degrees on the scene plane',
-                'units': '°',
-                'category': 'direction',
-            })
-
         if item.get('type') == 'Simulated Stain':
             major = parse_measurement_value(item.get('measurements', {}).get('majorAxis'))
             minor = parse_measurement_value(item.get('measurements', {}).get('minorAxis'))
             if major is not None and minor is not None and minor > 0:
                 ratio = major / minor
-                impact_angle = math.degrees(math.asin(minor / major)) if major != 0 else 0
                 calculations.append({
                     'id': f"{item.get('label')}-ellipse",
                     'evidenceId': item.get('id') or item.get('label'),
                     'title': f"{item.get('label')} ellipse geometry",
-                    'formula': 'ratio = major / minor and impact angle = arcsin(minor / major)',
+                    'formula': 'ratio = major axis / minor axis',
                     'inputs': f"{major:.1f} and {minor:.1f}",
-                    'calculation': f"Ratio = {ratio:.2f} and impact angle = {impact_angle:.1f}°",
-                    'result': f"{ratio:.2f} ratio, {impact_angle:.1f}°",
+                    'calculation': f"Ratio = {ratio:.2f}",
+                    'result': f"{ratio:.2f} ratio",
                     'assumptions': 'Elliptical geometry is interpreted from the recorded major and minor axes',
-                    'units': 'ratio / °',
+                    'units': 'ratio',
                     'category': 'ellipse',
                 })
 
@@ -94,8 +78,6 @@ def build_calculations(evidence: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             dx = b['position']['x'] - a['position']['x']
             dz = b['position']['z'] - a['position']['z']
             distance = math.hypot(dx, dz)
-            angle = math.degrees(math.atan2(dz, dx))
-
             calculations.append({
                 'id': f"{a.get('label')}-{b.get('label')}-distance",
                 'evidenceId': a.get('id') or a.get('label'),
@@ -123,17 +105,5 @@ def build_calculations(evidence: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     'category': 'stride',
                 })
 
-                calculations.append({
-                    'id': f"{a.get('label')}-{b.get('label')}-bearing",
-                    'evidenceId': a.get('id') or a.get('label'),
-                    'title': f"{a.get('label')} to {b.get('label')} direction",
-                    'formula': 'θ = atan2(Δz, Δx)',
-                    'inputs': f"{dx:.2f} and {dz:.2f}",
-                    'calculation': f"Direction = {angle:.1f}°",
-                    'result': f"{angle:.1f}°",
-                    'assumptions': 'Directional angle was derived from the coordinate difference',
-                    'units': '°',
-                    'category': 'direction',
-                })
 
     return calculations
